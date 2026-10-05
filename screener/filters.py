@@ -25,6 +25,13 @@ def tier2(market: Market, cfg: Tier2Config, now: datetime) -> Tier2Result:
     if age is not None and age > cfg.max_age_hours * 60:
         return Tier2Result(False, True, [f"older than {cfg.max_age_hours:g}h"])
 
+    if (
+        age is not None
+        and age > cfg.give_up_after_minutes
+        and market.liquidity_usd < cfg.give_up_below_liquidity_usd
+    ):
+        return Tier2Result(False, True, [f"still under ${cfg.give_up_below_liquidity_usd:,.0f} liquidity"])
+
     reasons = []
     if age is None:
         reasons.append("pool age unknown")

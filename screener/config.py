@@ -16,7 +16,11 @@ class DiscoveryConfig:
     dexscreener_profiles: bool = True
     dexscreener_boosts: bool = True
     pumpportal_migrations: bool = True
-    max_watchlist: int = 1500
+    helius_new_pools: bool = True
+    helius_programs: list[str] = field(
+        default_factory=lambda: ["raydium_amm_v4", "raydium_cpmm", "pumpswap", "meteora_dlmm"]
+    )
+    max_watchlist: int = 3000
 
 
 @dataclass
@@ -28,6 +32,8 @@ class Tier2Config:
     min_age_minutes: float = 15
     max_age_hours: float = 24
     min_volume_to_liquidity: float = 1.0
+    give_up_below_liquidity_usd: float = 2000
+    give_up_after_minutes: float = 120
     require_any_social: bool = False
 
 
@@ -73,6 +79,8 @@ class ApiConfig:
     goplus: str = "https://api.gopluslabs.io"
     jupiter: str = "https://lite-api.jup.ag"
     pumpportal_ws: str = "wss://pumpportal.fun/api/data"
+    helius_ws: str = "wss://mainnet.helius-rpc.com"
+    helius_rpc: str = "https://mainnet.helius-rpc.com"
 
 
 @dataclass
@@ -87,6 +95,7 @@ class Config:
     telegram_bot_token: str = ""
     telegram_chat_id: str = ""
     jupiter_api_key: str = ""
+    helius_api_key: str = ""
 
 
 _SECTIONS = {
@@ -115,4 +124,5 @@ def load_config(path: str | Path = "config.yaml") -> Config:
     cfg.telegram_bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
     cfg.telegram_chat_id = os.getenv("TELEGRAM_CHAT_ID", "").strip()
     cfg.jupiter_api_key = os.getenv("JUPITER_API_KEY", "").strip()
+    cfg.helius_api_key = os.getenv("HELIUS_API_KEY", "").strip()
     return cfg

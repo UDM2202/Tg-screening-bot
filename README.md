@@ -16,8 +16,8 @@ It also records the price of every coin it judged 1h, 24h and 7d later, for aler
   migrations)      or turns 24h old)                             (price at 1h/24h/7d)
 ```
 
-1. **Discovery.** Every 60s it pulls DexScreener's latest token profiles and boosts. It also streams pump.fun tokens that graduate to an AMM pool, from PumpPortal's free websocket. New tokens go on a watchlist.
-2. **Tier 2 market filter (cheap).** Uses DexScreener data only. Tokens that fail are re-checked every cycle until they pass or age out, since a 10-minute-old coin can look very different an hour later.
+1. **Discovery.** Every 60s it pulls DexScreener's latest token profiles and boosts. It also streams pump.fun tokens that graduate to an AMM pool, from PumpPortal's free websocket. With a Helius API key, it also watches new pools on Raydium (AMM v4 and CPMM), PumpSwap and Meteora DLMM as they're created. New tokens go on a watchlist.
+2. **Tier 2 market filter (cheap).** Uses DexScreener data only. Tokens that fail are re-checked every cycle until they pass or age out, since a 10-minute-old coin can look very different an hour later. Coins still under $2k liquidity after 2 hours are dropped early.
    - Liquidity ≥ $8k
    - Market cap $30k to $1.5M
    - Liquidity ≥ 5% of market cap
@@ -47,7 +47,7 @@ You need Python 3.11+.
    git clone <this repo> && cd Tg-screening-bot
    python3 -m venv .venv && source .venv/bin/activate
    pip install -r requirements.txt
-   cp .env.example .env    # then put your token and chat id in .env
+   cp .env.example .env    # then put your Telegram token, chat id and Helius key in .env
    ```
 3. **Run:**
    ```bash
@@ -55,7 +55,13 @@ You need Python 3.11+.
    python -m screener --once     # one screening cycle, then exit (good for testing)
    python -m screener --stats    # print the tracker report
    ```
-   Without a Telegram token, alerts print to the console instead.
+   Without a Telegram token, alerts print to the console instead. Without `HELIUS_API_KEY`, the Helius source is skipped and the rest still runs.
+
+### Helius new-pool discovery
+
+Get a key at [dashboard.helius.dev](https://dashboard.helius.dev) and put it in `.env` as `HELIUS_API_KEY`. The free plan is enough. The bot opens a websocket to Helius and uses `logsSubscribe` (standard Solana RPC) on each pool program. When a log shows a pool being created, it fetches that transaction with `getTransaction` to find the token's mint.
+
+Each new pool costs about one credit for the transaction lookup. Pick which DEXes to watch with `discovery.helius_programs` in `config.yaml`. The API key is masked in log output.
 
 ### Telegram commands
 
@@ -85,7 +91,7 @@ Every data source used here has a free tier: DexScreener, RugCheck, GoPlus, Jupi
 
 ## Known limits
 
-- **Discovery bias.** DexScreener profiles and boosts only include tokens whose team paid for them, and PumpPortal only sees pump.fun graduations. Raydium/Meteora launches without a paid profile are missed. Adding a Helius websocket for pool-creation events is the natural next source.
+- **Discovery coverage.** Without a Helius key, the bot only sees tokens with a paid DexScreener profile or boost, plus pump.fun graduations. Even with Helius, it only watches the four pool programs listed in `config.yaml`, so launches on other DEXes are missed.
 - **The sell check is a quote, not an on-chain simulation.** It catches missing sell routes and heavy sell taxes. The freeze authority and Token-2022 checks cover the main ways a token blocks selling on-chain.
 - **API shapes change.** The parsers are defensive, but if a source changes its response format, a check may start failing. Failures retry next cycle instead of letting a token through. Watch the logs after you first deploy.
 - **Holder data comes from RugCheck's top-holder list.** Wallets that split a large bag across many small wallets won't trip the concentration rule.
@@ -108,5 +114,5 @@ screener/
   tracker.py      price checkpoints and the performance report
   db.py           SQLite storage
   telegram.py     Bot API client
-  sources/        DexScreener, RugCheck, GoPlus, Jupiter, PumpPortal
+  sources/        DexScreener, RugCheck, GoPlus, Jupiter, PumpPortal, Helius
 ```

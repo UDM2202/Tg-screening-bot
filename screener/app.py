@@ -18,6 +18,7 @@ from .filters import tier1, tier2
 from .http import ApiError
 from .sources.dexscreener import DexScreener, Market
 from .sources.goplus import GoPlus
+from .sources.helius import HeliusPools
 from .sources.jupiter import Jupiter
 from .sources.pumpportal import stream_migrations
 from .sources.rugcheck import RugCheck
@@ -41,6 +42,7 @@ class Screener:
     def __init__(self, cfg: Config, client: httpx.AsyncClient, db: Database):
         self.cfg = cfg
         self.db = db
+        self.client = client
         self.dex = DexScreener(client, cfg.apis.dexscreener)
         self.rugcheck = RugCheck(client, cfg.apis.rugcheck)
         self.goplus = GoPlus(client, cfg.apis.goplus)
@@ -77,6 +79,10 @@ class Screener:
     async def on_migration(self, mint: str) -> None:
         if self.db.add_token(mint, "pumpportal"):
             log.debug("New migration: %s", mint)
+
+    async def on_new_pool(self, mint: str, dex: str) -> None:
+        if self.db.add_token(mint, f"helius:{dex}"):
+            log.debug("New %s pool: %s", dex, mint)
 
     # --- screening -------------------------------------------------------
 
@@ -262,4 +268,17 @@ class Screener:
         ]
         if self.cfg.discovery.pumpportal_migrations:
             tasks.append(stream_migrations(self.cfg.apis.pumpportal_ws, self.on_migration))
+        if self.cfg.discovery.helius_new_pools:
+            if self.cfg.helius_api_key:
+                helius = HeliusPools(
+                    self.client,
+                    self.cfg.helius_api_key,
+                    self.cfg.apis.helius_ws,
+                    self.cfg.apis.helius_rpc,
+                    self.on_new_pool,
+                    self.cfg.discovery.helius_programs,
+                )
+                tasks.append(helius.run())
+            else:
+                log.warning("HELIUS_API_KEY not set: skipping Helius new-pool discovery")
         await asyncio.gather(*tasks)

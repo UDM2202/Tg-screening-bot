@@ -8,8 +8,12 @@ discovery:
   dexscreener_boosts: true
   # Pump.fun tokens graduating to an AMM pool, streamed from PumpPortal (free websocket).
   pumpportal_migrations: true
+  # New pools on Raydium, PumpSwap and Meteora via a Helius websocket.
+  # Needs HELIUS_API_KEY in .env; skipped when the key is missing.
+  helius_new_pools: true
+  helius_programs: [raydium_amm_v4, raydium_cpmm, pumpswap, meteora_dlmm]
   # Tokens are re-checked every cycle until they pass, get rejected or age out.
-  max_watchlist: 1500
+  max_watchlist: 3000
 
 # Tier 2: cheap market pre-filter, DexScreener data only. Sized for ~$5 positions.
 tier2:
@@ -20,6 +24,10 @@ tier2:
   min_age_minutes: 15
   max_age_hours: 24
   min_volume_to_liquidity: 1.0
+  # Stop watching coins that are still this thin after this long. Most new pools
+  # never get going, and this keeps them from crowding out the watchlist.
+  give_up_below_liquidity_usd: 2000
+  give_up_after_minutes: 120
   # Socials are a soft score by default. Set true to drop tokens with no links at all.
   require_any_social: false
 
@@ -67,5 +75,7 @@ apis:
   goplus: https://api.gopluslabs.io
   jupiter: https://lite-api.jup.ag
   pumpportal_ws: wss://pumpportal.fun/api/data
+  helius_ws: wss://mainnet.helius-rpc.com
+  helius_rpc: https://mainnet.helius-rpc.com
 
 database: data/screener.db
