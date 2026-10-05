@@ -1,0 +1,71 @@
+# Screener rules. Tune these without touching code; restart the bot to apply.
+
+discovery:
+  poll_interval_seconds: 60
+  # DexScreener "latest token profiles" (tokens whose team paid for a profile).
+  dexscreener_profiles: true
+  # DexScreener "latest boosts".
+  dexscreener_boosts: true
+  # Pump.fun tokens graduating to an AMM pool, streamed from PumpPortal (free websocket).
+  pumpportal_migrations: true
+  # Tokens are re-checked every cycle until they pass, get rejected or age out.
+  max_watchlist: 1500
+
+# Tier 2: cheap market pre-filter, DexScreener data only. Sized for ~$5 positions.
+tier2:
+  min_liquidity_usd: 8000
+  min_market_cap_usd: 30000
+  max_market_cap_usd: 1500000
+  min_liquidity_to_mcap_pct: 5
+  min_age_minutes: 15
+  max_age_hours: 24
+  min_volume_to_liquidity: 1.0
+  # Socials are a soft score by default. Set true to drop tokens with no links at all.
+  require_any_social: false
+
+# Tier 1: hard rug rejects. Rug risk doesn't shrink with position size, so don't loosen these.
+tier1:
+  require_mint_authority_revoked: true
+  require_freeze_authority_revoked: true
+  min_lp_locked_pct: 90
+  max_top10_holders_pct: 30
+  max_single_holder_pct: 10
+  max_dev_holding_pct: 5
+  reject_creator_rug_history: true
+  # Reject when RugCheck reports any "danger" level risk, except those listed below.
+  reject_rugcheck_danger_risks: true
+  ignore_danger_risks: ["Low Liquidity"]
+  # Token-2022 traps: transfer fees, transfer hooks, non-transferable, closable, mutable balances.
+  reject_token2022_traps: true
+  # Honeypot check: quote a buy then a sell of the received tokens on Jupiter.
+  require_sell_route: true
+  max_round_trip_loss_pct: 15
+  sell_sim_sol_amount: 0.03
+  sell_sim_slippage_bps: 1000
+  # GoPlus is a second opinion on authorities, Token-2022 traps and malicious creators.
+  use_goplus: true
+
+socials:
+  min_telegram_members: 100
+  # Warn when the same website was already used by another token.
+  warn_website_reuse: true
+
+tracker:
+  # Price is recorded this long after each decision (alert or reject).
+  checkpoints:
+    1h: 3600
+    24h: 86400
+    7d: 604800
+  interval_seconds: 300
+  # Also track rejected coins, so you can compare passing alerts against the rest.
+  track_rejected: true
+  weekly_summary: true
+
+apis:
+  dexscreener: https://api.dexscreener.com
+  rugcheck: https://api.rugcheck.xyz
+  goplus: https://api.gopluslabs.io
+  jupiter: https://lite-api.jup.ag
+  pumpportal_ws: wss://pumpportal.fun/api/data
+
+database: data/screener.db

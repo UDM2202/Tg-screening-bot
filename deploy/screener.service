@@ -1,0 +1,17 @@
+# systemd unit for a Linux VPS. Copy to /etc/systemd/system/screener.service, then:
+#   sudo systemctl daemon-reload && sudo systemctl enable --now screener
+#   journalctl -u screener -f     # view logs
+[Unit]
+Description=Solana memecoin screener (Telegram alerts)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=screener
+WorkingDirectory=/opt/tg-screening-bot
+ExecStart=/opt/tg-screening-bot/.venv/bin/python -m screener
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
