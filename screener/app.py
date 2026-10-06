@@ -11,7 +11,7 @@ from html import escape
 import httpx
 
 from . import socials as socials_mod
-from .alerts import format_alert, usd
+from .alerts import age_text, format_alert, usd
 from .config import Config
 from .db import Database
 from .filters import tier1, tier2
@@ -156,7 +156,11 @@ class Screener:
         self.db.decide(
             market.address,
             "alerted",
-            details={"warnings": result.warnings + socials.warnings, "socials": socials.score},
+            details={
+                "warnings": result.warnings + socials.warnings,
+                "socials": socials.score,
+                "age_minutes": market.age_minutes(datetime.now(timezone.utc)),
+            },
             **decision,
         )
         if self.db.get_meta("paused") == "1":
@@ -194,7 +198,8 @@ class Screener:
                 f"Watching: {counts.get('watching', 0)}\n"
                 f"Alerted: {counts.get('alerted', 0)}\n"
                 f"Rejected by rug checks: {counts.get('rejected', 0)}\n"
-                f"Aged out: {counts.get('expired', 0)}"
+                f"Aged out: {counts.get('expired', 0)}\n\n"
+                + self.speed_report()
             )
         if cmd == "/stats":
             return self.report()
@@ -241,10 +246,40 @@ class Screener:
     # --- loops -----------------------------------------------------------
 
     async def run_cycle(self) -> None:
+        started = time.time()
         new = await self.discover()
         if new:
             log.info("Discovered %d new tokens", new)
         await self.screen_watchlist()
+        took = time.time() - started
+        self.db.set_meta("last_cycle_at", str(time.time()))
+        self.db.set_meta("last_cycle_seconds", f"{took:.1f}")
+        if took > self.cfg.discovery.poll_interval_seconds:
+            log.warning("Screening cycle took %.0fs, longer than the %ss interval",
+                        took, self.cfg.discovery.poll_interval_seconds)
+
+    def speed_report(self) -> str:
+        lines = []
+        last_at = self.db.get_meta("last_cycle_at")
+        if last_at:
+            ago = time.time() - float(last_at)
+            took = float(self.db.get_meta("last_cycle_seconds", "0") or 0)
+            interval = self.cfg.discovery.poll_interval_seconds
+            lines.append(f"Last scan: {ago:.0f}s ago, took {took:.0f}s (runs every {interval}s)")
+            if took > interval:
+                lines.append("⚠️ Scans take longer than the interval, so the bot is falling behind")
+            if ago > interval + took + 120:
+                lines.append("⚠️ No scan for a while. Check the logs")
+        else:
+            lines.append("Last scan: none yet")
+        ages = self.db.recent_alert_ages()
+        if ages:
+            ages.sort()
+            lines.append(
+                f"Coin age at alert (last {len(ages)}): median {age_text(ages[len(ages) // 2])}, "
+                f"youngest {age_text(ages[0])}"
+            )
+        return "\n".join(lines)
 
     async def _every(self, seconds: float, fn, name: str) -> None:
         while True:

@@ -109,6 +109,9 @@ async def test_pause_still_logs_but_does_not_send(setup):
         assert db.status(GOOD) == "alerted"
         assert apis.sent == []
         assert "Alerted: 1" in s.handle_command("/status")
+        status = s.handle_command("/status")
+        assert "Last scan:" in status and "took" in status
+        assert "Coin age at alert (last 1): median 2h 0m" in status
         assert GOOD in s.handle_command("/recent")
 
 

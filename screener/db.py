@@ -142,6 +142,15 @@ class Database:
             )
         )
 
+    def recent_alert_ages(self, limit: int = 20) -> list[float]:
+        """Coin age in minutes at the moment of each recent alert."""
+        ages = []
+        for row in self.recent_alerts(limit):
+            age = json.loads(row["details"] or "{}").get("age_minutes")
+            if age is not None:
+                ages.append(float(age))
+        return ages
+
     # --- websites (reuse detection) --------------------------------------
 
     def record_websites(self, address: str, urls: list[str]) -> dict[str, int]:
