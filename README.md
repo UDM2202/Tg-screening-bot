@@ -26,7 +26,7 @@ It also records the price of every coin it judged 1h, 24h and 7d later, for aler
 3. **Tier 1 rug checks (hard rejects).** These run only on tokens that pass Tier 2. A token that fails here is rejected for good.
    - Mint authority and freeze authority revoked (RugCheck, with GoPlus as a second opinion)
    - ≥ 90% of LP locked or burned (liquidity-weighted across pools)
-   - Top 10 holders ≤ 30%, no single wallet > 10%, dev wallet ≤ 5% (pool accounts excluded)
+   - Top 10 holders ≤ 20%, no single wallet > 10%, dev wallet ≤ 5% (pool accounts excluded)
    - Creator has no rug history and isn't flagged as malicious
    - No RugCheck "danger" risks (configurable ignore list)
    - No Token-2022 traps: transfer fees, transfer hooks, non-transferable, closable, balances editable by an authority

@@ -42,7 +42,7 @@ class Tier1Config:
     require_mint_authority_revoked: bool = True
     require_freeze_authority_revoked: bool = True
     min_lp_locked_pct: float = 90
-    max_top10_holders_pct: float = 30
+    max_top10_holders_pct: float = 20
     max_single_holder_pct: float = 10
     max_dev_holding_pct: float = 5
     reject_creator_rug_history: bool = True

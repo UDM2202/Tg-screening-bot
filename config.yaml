@@ -36,7 +36,7 @@ tier1:
   require_mint_authority_revoked: true
   require_freeze_authority_revoked: true
   min_lp_locked_pct: 90
-  max_top10_holders_pct: 30
+  max_top10_holders_pct: 20
   max_single_holder_pct: 10
   max_dev_holding_pct: 5
   reject_creator_rug_history: true

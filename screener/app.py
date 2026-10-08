@@ -162,6 +162,7 @@ class Screener:
                 "warnings": result.warnings + socials.warnings,
                 "socials": socials.score,
                 "age_minutes": market.age_minutes(datetime.now(timezone.utc)),
+                "insiders": rug.insiders_detected,
             },
             **decision,
         )

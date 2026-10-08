@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import statistics
 import time
 from collections import defaultdict
@@ -59,6 +60,25 @@ def outcome_return(ref_price: float | None, price: float | None, liquidity: floa
     return price / ref_price - 1
 
 
+# Alerts are split at this many RugCheck-detected insider wallets in /stats.
+INSIDER_SPLIT = 20
+INSIDER_WARNING = re.compile(r"(\d+) insider wallets detected")
+
+
+def insider_count(details_json: str | None) -> int | None:
+    """Insider wallets recorded for an alert. Older alerts only have it in their warnings."""
+    details = json.loads(details_json or "{}")
+    if details.get("insiders") is not None:
+        return int(details["insiders"])
+    if "warnings" not in details:
+        return None
+    for warning in details["warnings"]:
+        match = INSIDER_WARNING.search(warning)
+        if match:
+            return int(match.group(1))
+    return 0
+
+
 ROW = "{:<15}{:>4}{:>8}{:>6}{:>6}{:>6}"
 HEADER = ROW.format("", "n", "median", "up", "2x", "-50%")
 
@@ -75,11 +95,17 @@ def _row(label: str, returns: list[float]) -> str:
 def build_report(db: Database, checkpoints: list[str], since: float = 0, title: str = "Tracker") -> str:
     groups: dict[tuple[str, str], list[float]] = defaultdict(list)
     by_reason: dict[tuple[str, str], list[float]] = defaultdict(list)
+    by_insiders: dict[tuple[str, str], list[float]] = defaultdict(list)
     for row in db.outcomes(since):
         r = outcome_return(row["ref_price"], row["price"], row["liquidity"])
         if r is None:
             continue
         groups[(row["status"], row["checkpoint"])].append(r)
+        if row["status"] == "alerted":
+            insiders = insider_count(row["details"])
+            if insiders is not None:
+                bucket = f"0-{INSIDER_SPLIT}" if insiders <= INSIDER_SPLIT else f"{INSIDER_SPLIT + 1}+"
+                by_insiders[(bucket, row["checkpoint"])].append(r)
         if row["status"] == "rejected":
             for code in json.loads(row["reject_codes"] or "[]"):
                 by_reason[(code, row["checkpoint"])].append(r)
@@ -104,6 +130,19 @@ def build_report(db: Database, checkpoints: list[str], since: float = 0, title: 
         for code in reasons:
             if by_reason[(code, cp)]:
                 lines.append(_row(code[:15], by_reason[(code, cp)]))
+    buckets = [f"0-{INSIDER_SPLIT}", f"{INSIDER_SPLIT + 1}+"]
+    if by_insiders:
+        # Many insider wallets can hide a coordinated holding that the top-10 rule misses.
+        cp = max(
+            (c for c in checkpoints if any(by_insiders[(b, c)] for b in buckets)),
+            key=checkpoints.index,
+            default=checkpoints[0],
+        )
+        lines.append("")
+        lines.append(f"Alerts by insider wallets [{cp}]")
+        lines.append(HEADER)
+        for b in buckets:
+            lines.append(_row(f"{b} insiders", by_insiders[(b, cp)]))
     lines.append("</pre>")
     lines.append("<i>pass = alerted, fail = passed the market filter but failed a rug check. "
                  "Returns are from the price at decision time; dead pools count as -100%.</i>")

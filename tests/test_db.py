@@ -23,3 +23,12 @@ def test_undo_token2022_rejections():
     assert json.loads(row["details"])["reasons"] == ["only 10% of LP locked/burned"]
     assert db.status("clean_reject") == "rejected"
     assert db.undo_token2022_rejections() == 0  # runs once only
+
+
+def test_insider_count_reads_new_and_old_alerts():
+    from screener.tracker import insider_count
+    assert insider_count(json.dumps({"insiders": 33, "warnings": []})) == 33
+    # Alerts from before the field existed only have the warning text.
+    assert insider_count(json.dumps({"warnings": ["272 insider wallets detected", "no socials at all"]})) == 272
+    assert insider_count(json.dumps({"warnings": ["no socials at all"]})) == 0
+    assert insider_count(None) is None
