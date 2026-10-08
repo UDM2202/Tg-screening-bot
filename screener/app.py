@@ -174,7 +174,15 @@ class Screener:
     # --- tracker and reports --------------------------------------------
 
     def report(self, since: float = 0, title: str = "Tracker (all time)") -> str:
-        return build_report(self.db, list(self.cfg.tracker.checkpoints), since, title)
+        checkpoints = list(self.cfg.tracker.checkpoints)
+        report = build_report(self.db, checkpoints, since, title)
+        progress = self.db.alert_progress(checkpoints, since)
+        waiting = " · ".join(f"{cp}: {progress[cp][0]}" for cp in checkpoints)
+        lines = [report, "", f"Alerts still waiting for their checkpoint: {waiting}"]
+        missed = " · ".join(f"{cp}: {progress[cp][1]}" for cp in checkpoints if progress[cp][1])
+        if missed:
+            lines.append(f"Checkpoints missed while the bot was offline: {missed}")
+        return "\n".join(lines)
 
     async def track(self) -> None:
         await take_snapshots(self.db, self.dex, self.cfg.tracker)

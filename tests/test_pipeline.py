@@ -98,6 +98,7 @@ async def test_full_cycle_alerts_only_the_clean_token(setup):
         report = s.report()
         assert re.search(r"pass\s+1\s+\+100%", report), report
         assert "mint_authority" in report
+        assert "waiting for their checkpoint: 1h: 0 · 24h: 1 · 7d: 1" in report
         rejects = s.handle_command("/rejects")
         assert "Rejected coins: 1" in rejects
         assert "mint_authority: 1 (100%)" in rejects
@@ -146,5 +147,6 @@ async def test_late_checkpoints_are_marked_missed(setup):
         assert await take_snapshots(db, s.dex, cfg.tracker, now=time.time() + 25 * 3600) == 2
         rows = db.conn.execute("SELECT checkpoint, missed FROM snapshots WHERE address = ?", (GOOD,))
         assert dict(rows.fetchall()) == {"1h": 1, "24h": 0}
+        assert "missed while the bot was offline: 1h: 1" in s.report()
         # Missed checkpoints are not counted as dead coins.
         assert re.search(r"\[1h\].*\npass\s+0", s.report()), s.report()

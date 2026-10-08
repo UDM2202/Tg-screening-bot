@@ -217,6 +217,21 @@ class Database:
         )
         self.conn.commit()
 
+    def alert_progress(self, checkpoints: list[str], since: float = 0) -> dict[str, tuple[int, int]]:
+        """Per checkpoint: (alerts still waiting for it, alerts whose checkpoint was missed)."""
+        progress = {}
+        for cp in checkpoints:
+            row = self.conn.execute(
+                "SELECT"
+                " SUM(CASE WHEN s.address IS NULL THEN 1 ELSE 0 END) AS waiting,"
+                " SUM(CASE WHEN s.missed = 1 THEN 1 ELSE 0 END) AS missed"
+                " FROM tokens t LEFT JOIN snapshots s ON s.address = t.address AND s.checkpoint = ?"
+                " WHERE t.status = 'alerted' AND t.decided_at >= ?",
+                (cp, since),
+            ).fetchone()
+            progress[cp] = (row["waiting"] or 0, row["missed"] or 0)
+        return progress
+
     def outcomes(self, since: float = 0) -> list[sqlite3.Row]:
         """One row per (decided token, checkpoint) with the baseline and snapshot."""
         return list(
