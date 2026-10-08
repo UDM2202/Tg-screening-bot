@@ -229,6 +229,43 @@ class Database:
             )
         )
 
+    def undo_token2022_rejections(self) -> int:
+        """One-off repair for a GoPlus parsing bug that flagged every coin as a Token-2022 trap.
+
+        Removes that rule from past rejections. Coins with no other failed rule go back on
+        the watchlist (their tracker data is dropped, since they were never truly rejected).
+        """
+        if self.get_meta("fixed_token2022_v1") == "1":
+            return 0
+        requeued = 0
+        rows = list(self.conn.execute(
+            "SELECT address, reject_codes, details FROM tokens WHERE status = 'rejected'"
+        ))
+        for row in rows:
+            codes = json.loads(row["reject_codes"] or "[]")
+            if "token2022_trap" not in codes:
+                continue
+            codes = [c for c in codes if c != "token2022_trap"]
+            details = json.loads(row["details"] or "{}")
+            details["reasons"] = [r for r in details.get("reasons", []) if not r.startswith("Token-2022 trap")]
+            if codes:
+                self.conn.execute(
+                    "UPDATE tokens SET reject_codes = ?, details = ? WHERE address = ?",
+                    (json.dumps(codes), json.dumps(details), row["address"]),
+                )
+            else:
+                self.conn.execute(
+                    "UPDATE tokens SET status = 'watching', decided_at = NULL, ref_price = NULL,"
+                    " ref_mcap = NULL, ref_liquidity = NULL, reject_codes = NULL, details = NULL"
+                    " WHERE address = ?",
+                    (row["address"],),
+                )
+                self.conn.execute("DELETE FROM snapshots WHERE address = ?", (row["address"],))
+                requeued += 1
+        self.set_meta("fixed_token2022_v1", "1")
+        self.conn.commit()
+        return requeued
+
     # --- meta ------------------------------------------------------------
 
     def get_meta(self, key: str, default: str | None = None) -> str | None:

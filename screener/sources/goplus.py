@@ -9,15 +9,16 @@ import httpx
 
 from ..http import ApiError, get_json
 
-# GoPlus field -> label shown in alerts.
+# GoPlus status-style fields -> label shown in alerts.
 TRAP_FIELDS = {
-    "transfer_fee": "transfer fee",
     "transfer_hook": "transfer hook",
     "non_transferable": "non-transferable",
     "closable": "closable by authority",
     "balance_mutable_authority": "balances editable by authority",
-    "default_account_state": "new accounts frozen by default",
 }
+
+# SPL account states: 0 = uninitialized, 1 = initialized (normal), 2 = frozen.
+FROZEN_ACCOUNT_STATES = {"2", "frozen"}
 
 
 @dataclass
@@ -29,30 +30,47 @@ class GoPlusFacts:
 
 
 def _flag(value: Any) -> bool:
-    """GoPlus encodes flags as "1", {"status": "1"}, or a non-empty list/fee object."""
+    """GoPlus encodes flags as "1", {"status": "1"}, or a non-empty list."""
     if isinstance(value, dict):
-        if "status" in value:
-            return str(value["status"]) == "1"
-        rate = value.get("current_fee_rate") or value.get("fee_rate")
-        if rate is not None:
-            try:
-                return float(rate) > 0
-            except (TypeError, ValueError):
-                return True
-        return bool(value)
+        return str(value.get("status")) == "1"
     if isinstance(value, list):
         return len(value) > 0
     return str(value) == "1"
 
 
+def _has_fee(value: Any) -> bool:
+    """True if any fee rate in GoPlus's (possibly nested) transfer_fee object is above zero."""
+    if isinstance(value, dict):
+        for key, inner in value.items():
+            if "fee_rate" in key and not isinstance(inner, (dict, list)):
+                try:
+                    if float(inner) > 0:
+                        return True
+                except (TypeError, ValueError):
+                    pass
+            elif _has_fee(inner):
+                return True
+    elif isinstance(value, list):
+        return any(_has_fee(v) for v in value)
+    return False
+
+
+def _frozen_by_default(value: Any) -> bool:
+    if isinstance(value, dict):
+        value = value.get("status", value.get("state"))
+    return str(value).strip().lower() in FROZEN_ACCOUNT_STATES
+
+
 def parse_security(data: dict[str, Any]) -> GoPlusFacts:
-    state = data.get("default_account_state")
-    if isinstance(state, str) and state.lower() in ("frozen", "2"):
-        data = {**data, "default_account_state": "1"}
+    traps = [label for key, label in TRAP_FIELDS.items() if _flag(data.get(key))]
+    if _has_fee(data.get("transfer_fee")):
+        traps.insert(0, "transfer fee")
+    if _frozen_by_default(data.get("default_account_state")):
+        traps.append("new accounts frozen by default")
     return GoPlusFacts(
         mintable=_flag(data.get("mintable")),
         freezable=_flag(data.get("freezable")),
-        traps=[label for key, label in TRAP_FIELDS.items() if _flag(data.get(key))],
+        traps=traps,
         malicious_creator=any(
             str(c.get("malicious_address")) == "1" for c in data.get("creators") or []
         ),

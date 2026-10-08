@@ -90,7 +90,7 @@ def test_tier1_honeypot_and_token2022():
     cfg = Tier1Config()
     assert not tier1(rug, None, SellSim(False, error="no sell route"), cfg).passed
     assert not tier1(rug, None, SellSim(True, 40.0), cfg).passed
-    gp = parse_security(goplus_result(GOOD, transfer_fee={"current_fee_rate": "5"})["result"][GOOD])
+    gp = parse_security(goplus_result(GOOD, transfer_fee={"current_fee_rate": {"fee_rate": "5"}})["result"][GOOD])
     assert gp.traps == ["transfer fee"]
     assert not tier1(rug, gp, SellSim(True, 4.0), cfg).passed
 
@@ -100,3 +100,22 @@ def test_goplus_mint_authority_is_respected():
     gp = parse_security(goplus_result(GOOD, mintable={"status": "1"})["result"][GOOD])
     r = tier1(rug, gp, SellSim(True, 4.0), Tier1Config())
     assert ("mint_authority", "mint authority not revoked") in r.rejects
+
+
+def test_goplus_normal_token_has_no_traps():
+    # default_account_state "1" means Initialized (normal), not frozen.
+    data = goplus_result(GOOD, default_account_state="1",
+                         transfer_fee={"current_fee_rate": {"fee_rate": "0", "maximum_fee": "0"},
+                                       "scheduled_fee_rate": [{"epoch": "0", "fee_rate": "0"}]})
+    gp = parse_security(data["result"][GOOD])
+    assert gp.traps == []
+
+
+def test_goplus_real_traps_still_caught():
+    frozen = parse_security(goplus_result(GOOD, default_account_state="2")["result"][GOOD])
+    assert frozen.traps == ["new accounts frozen by default"]
+    fee = parse_security(goplus_result(GOOD, transfer_fee={
+        "current_fee_rate": {"fee_rate": "500", "maximum_fee": "1000"}})["result"][GOOD])
+    assert fee.traps == ["transfer fee"]
+    hook = parse_security(goplus_result(GOOD, transfer_hook=[{"address": "x"}])["result"][GOOD])
+    assert hook.traps == ["transfer hook"]

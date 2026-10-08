@@ -306,6 +306,9 @@ class Screener:
             await asyncio.sleep(seconds)
 
     async def run(self) -> None:
+        requeued = self.db.undo_token2022_rejections()
+        if requeued:
+            log.info("Re-checking %d coins wrongly rejected as Token-2022 traps", requeued)
         if not self.tg.enabled:
             log.warning("TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID not set: alerts print to the console")
         else:
