@@ -134,6 +134,23 @@ class Database:
         rows = self.conn.execute("SELECT status, COUNT(*) AS n FROM tokens GROUP BY status")
         return {r["status"]: r["n"] for r in rows}
 
+    def reject_summary(self, recent: int = 5) -> tuple[dict[str, int], int, list[sqlite3.Row]]:
+        """How often each rule rejected a coin, total rejections, and the latest rejections."""
+        counts: dict[str, int] = {}
+        total = 0
+        for row in self.conn.execute("SELECT reject_codes FROM tokens WHERE status = 'rejected'"):
+            total += 1
+            for code in json.loads(row["reject_codes"] or "[]"):
+                counts[code] = counts.get(code, 0) + 1
+        latest = list(
+            self.conn.execute(
+                "SELECT symbol, address, details FROM tokens WHERE status = 'rejected'"
+                " ORDER BY decided_at DESC LIMIT ?",
+                (recent,),
+            )
+        )
+        return counts, total, latest
+
     def recent_alerts(self, limit: int = 10) -> list[sqlite3.Row]:
         return list(
             self.conn.execute(

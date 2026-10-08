@@ -98,6 +98,10 @@ async def test_full_cycle_alerts_only_the_clean_token(setup):
         report = s.report()
         assert re.search(r"pass\s+1\s+\+100%", report), report
         assert "mint_authority" in report
+        rejects = s.handle_command("/rejects")
+        assert "Rejected coins: 1" in rejects
+        assert "mint_authority: 1 (100%)" in rejects
+        assert "$RUG: mint authority not revoked" in rejects
 
 
 async def test_pause_still_logs_but_does_not_send(setup):

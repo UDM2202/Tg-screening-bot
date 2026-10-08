@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import time
 from datetime import datetime, timezone
@@ -33,6 +34,7 @@ HELP = (
     "/stats – how alerts performed vs rejected coins (all time)\n"
     "/week – same, last 7 days\n"
     "/recent – last 10 alerts\n"
+    "/rejects – which rug checks reject coins most, with examples\n"
     "/pause – stop sending alerts (screening and tracking continue)\n"
     "/resume – start sending alerts again"
 )
@@ -215,6 +217,18 @@ class Screener:
                 f"<code>{r['address']}</code>"
                 for r in rows
             )
+        if cmd == "/rejects":
+            counts, total, latest = self.db.reject_summary()
+            if not total:
+                return "No coins rejected yet."
+            lines = [f"<b>Rejected coins: {total}</b>", "A coin can fail several rules.", ""]
+            for code, n in sorted(counts.items(), key=lambda kv: -kv[1]):
+                lines.append(f"{code}: {n} ({n / total * 100:.0f}%)")
+            lines += ["", "<b>Latest rejections</b>"]
+            for r in latest:
+                reasons = json.loads(r["details"] or "{}").get("reasons", [])
+                lines.append(f"${escape(r['symbol'] or '?')}: " + escape("; ".join(reasons)))
+            return "\n".join(lines)
         if cmd == "/pause":
             self.db.set_meta("paused", "1")
             return "⏸ Alerts paused. Screening and tracking continue."
