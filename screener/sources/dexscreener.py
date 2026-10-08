@@ -30,6 +30,9 @@ class Market:
     created_at: datetime | None
     websites: list[str] = field(default_factory=list)
     socials: list[tuple[str, str]] = field(default_factory=list)  # (type, url)
+    buys_m5: int = 0
+    sells_m5: int = 0
+    price_change_m5: float | None = None
 
     def age_minutes(self, now: datetime) -> float | None:
         if self.created_at is None:
@@ -87,6 +90,9 @@ def parse_market(address: str, pairs: list[dict[str, Any]]) -> Market | None:
         market_cap_usd=_float(best.get("marketCap")) or _float(best.get("fdv")),
         volume_h24=sum(_float((p.get("volume") or {}).get("h24")) or 0.0 for p in pairs),
         price_change_h1=_float((best.get("priceChange") or {}).get("h1")),
+        price_change_m5=_float((best.get("priceChange") or {}).get("m5")),
+        buys_m5=sum(int(((p.get("txns") or {}).get("m5") or {}).get("buys") or 0) for p in pairs),
+        sells_m5=sum(int(((p.get("txns") or {}).get("m5") or {}).get("sells") or 0) for p in pairs),
         created_at=(
             datetime.fromtimestamp(min(created) / 1000, tz=timezone.utc) if created else None
         ),

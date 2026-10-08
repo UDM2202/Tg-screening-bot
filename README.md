@@ -34,6 +34,7 @@ It also records the price of every coin it judged 1h, 24h and 7d later, for aler
 4. **Socials (soft score, never a reject).** It checks for a website, X and Telegram, and fetches the Telegram member count. It warns when the website was reused from another token, when the X link is a post instead of an account, when the Telegram group is tiny, or when there are no socials at all.
 5. **Alert.** You get the key stats, the passed checks, any warnings, and one-tap buttons: DexScreener, RugCheck, Solscan, X search and the token's own links.
 6. **Tracker.** Every alerted *and* rejected coin gets its price recorded at 1h, 24h and 7d. `/stats` and the weekly summary compare the two groups and break the rejected coins down by the rule that rejected them. If coins rejected by some rule keep doing well, that rule may be too strict.
+7. **Position watch.** For 24 hours after each alert, the bot warns if the coin's liquidity drops by half or more (a likely rug). Reply `/bought` to an alert after you buy, and for the next 72 hours it also messages you at 2x, 5x and 10x from your entry, when price falls 30% from its peak, and when sells heavily outnumber buys. The warnings react to a dip that has started; they can't predict one. Thresholds are under `watch:` in `config.yaml`.
 
 Every threshold lives in [`config.yaml`](config.yaml).
 
@@ -71,6 +72,9 @@ Each new pool costs about one credit for the transaction lookup. Pick which DEXe
 | `/stats` | Alerted vs rejected performance, all time |
 | `/week` | Same, last 7 days |
 | `/recent` | Last 10 alerts |
+| `/bought` | Reply to an alert after you buy, or send `/bought <address>` or `/bought $SYMBOL`. Starts the full position watch from the current price. |
+| `/sold` | Stop watching a coin (reply, address or `$SYMBOL`). |
+| `/positions` | Coins you're holding: multiple since entry, current and peak market cap. |
 | `/pause` / `/resume` | Stop or restart alerts. Screening and tracking keep running. |
 
 The bot only answers the chat id in `.env`.
@@ -112,6 +116,7 @@ screener/
   socials.py      socials soft score
   alerts.py       alert message formatting
   tracker.py      price checkpoints and the performance report
+  watch.py        follow-up warnings: milestones, dips, sell pressure, pulled liquidity
   db.py           SQLite storage
   telegram.py     Bot API client
   sources/        DexScreener, RugCheck, GoPlus, Jupiter, PumpPortal, Helius

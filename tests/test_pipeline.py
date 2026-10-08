@@ -19,6 +19,8 @@ from .fixtures import GOOD, RUG, YOUNG, goplus_result, pair, rug_report
 class FakeApis:
     def __init__(self):
         self.price = 0.0002
+        self.liq = 20_000
+        self.txns_m5 = (5, 5, 0.0)  # buys, sells, price change %
         self.sent: list[dict] = []
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
@@ -34,7 +36,11 @@ class FakeApis:
             pairs = []
             for a in addrs:
                 if a == GOOD:
-                    pairs.append(pair(GOOD, price=self.price))
+                    p = pair(GOOD, price=self.price, liq=self.liq, mcap=200_000 * self.price / 0.0002)
+                    buys, sells, change = self.txns_m5
+                    p["txns"] = {"m5": {"buys": buys, "sells": sells}}
+                    p["priceChange"]["m5"] = change
+                    pairs.append(p)
                 elif a == RUG:
                     pairs.append(pair(RUG, symbol="RUG", price=self.price))
                 elif a == YOUNG:
@@ -54,7 +60,7 @@ class FakeApis:
             body = json.loads(request.content)
             if url.endswith("/sendMessage"):
                 self.sent.append(body)
-                return httpx.Response(200, json={"ok": True, "result": {}})
+                return httpx.Response(200, json={"ok": True, "result": {"message_id": 100 + len(self.sent)}})
             if url.endswith("/getChatMemberCount"):
                 return httpx.Response(200, json={"ok": True, "result": 1234})
         return httpx.Response(404)
@@ -151,3 +157,70 @@ async def test_late_checkpoints_are_marked_missed(setup):
         assert "missed while the bot was offline: 1h: 1" in s.report()
         # Missed checkpoints are not counted as dead coins.
         assert re.search(r"\[1h\].*\npass\s+0", s.report()), s.report()
+
+
+async def test_rug_warning_replies_to_alert_for_every_alerted_coin(setup):
+    apis, cfg, db = setup
+    async with httpx.AsyncClient(transport=httpx.MockTransport(apis)) as client:
+        s = Screener(cfg, client, db)
+        await s.run_cycle()
+        alert_id = 101  # first message sent
+        apis.liq = 8_000  # liquidity pulled by 60%
+        await s.check_watches()
+        warning = apis.sent[-1]
+        assert warning["text"].startswith("🚨 <b>$GOOD</b>: liquidity fell 60%")
+        assert warning["reply_parameters"]["message_id"] == alert_id
+        await s.check_watches()
+        assert len(apis.sent) == 2  # sent once only
+
+
+async def test_bought_by_reply_then_milestones_dip_and_sold(setup):
+    apis, cfg, db = setup
+    async with httpx.AsyncClient(transport=httpx.MockTransport(apis)) as client:
+        s = Screener(cfg, client, db)
+        await s.run_cycle()
+        alert_id = 101
+
+        # Not bought yet: price moves only matter for coins you hold.
+        apis.price = 0.0005
+        await s.check_watches()
+        assert len(apis.sent) == 1
+
+        reply = await s.handle_message("/bought", reply_to=alert_id)
+        assert reply.startswith("✅ Watching $GOOD from MC $500.0k")
+
+        apis.price = 0.0016  # 3.2x from the /bought price
+        await s.check_watches()
+        assert "🚀 <b>$GOOD</b> hit 2x since you bought (MC $500.0k → $1.60M)" in apis.sent[-1]["text"]
+        assert apis.sent[-1]["reply_parameters"]["message_id"] == alert_id
+
+        apis.price = 0.0010  # 37.5% below the 0.0016 peak
+        await s.check_watches()
+        assert "⚠️ <b>$GOOD</b> is down 38% from its peak (MC $1.60M → $1.00M). Now 2.0x" in apis.sent[-1]["text"]
+        count = len(apis.sent)
+        await s.check_watches()
+        assert len(apis.sent) == count  # same dip isn't repeated
+
+        apis.txns_m5 = (4, 40, -20.0)
+        await s.check_watches()
+        assert "🔻 <b>$GOOD</b>: 40 sells vs 4 buys in the last 5 min, price -20%" in apis.sent[-1]["text"]
+
+        positions = await s.handle_message("/positions")
+        assert "$GOOD · 2.00x · MC $500.0k → $1.00M (peak $1.60M)" in positions
+
+        assert await s.handle_message("/sold $good") == "Stopped watching $GOOD."
+        apis.price = 0.01
+        count = len(apis.sent)
+        await s.check_watches()
+        assert len(apis.sent) == count
+        assert (await s.handle_message("/positions")).startswith("No positions")
+
+
+async def test_bought_needs_a_coin(setup):
+    apis, cfg, db = setup
+    async with httpx.AsyncClient(transport=httpx.MockTransport(apis)) as client:
+        s = Screener(cfg, client, db)
+        assert (await s.handle_message("/bought")).startswith("Which coin?")
+        assert (await s.handle_message("/bought $NOPE")).startswith("Which coin?")
+        # Coins the bot never alerted can still be watched by address.
+        assert (await s.handle_message(f"/bought {GOOD}")).startswith("✅ Watching $GOOD")

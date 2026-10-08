@@ -28,26 +28,33 @@ class Telegram:
             raise RuntimeError(f"Telegram {method}: {body.get('description')}")
         return body["result"]
 
-    async def send(self, text: str, buttons: list[list[Button]] | None = None) -> None:
+    async def send(
+        self, text: str, buttons: list[list[Button]] | None = None, reply_to: int | None = None
+    ) -> int | None:
+        """Send a message and return its id, or None if it wasn't delivered to Telegram."""
         if not self.enabled:
             plain = html.unescape(re.sub(r"<[^>]+>", "", text))
             links = "\n".join(f"  {label}: {url}" for row in buttons or [] for label, url in row)
             print(f"\n{'=' * 60}\n{plain}\n{links}\n{'=' * 60}", flush=True)
-            return
+            return None
         payload: dict[str, Any] = {
             "chat_id": self.chat_id,
             "text": text,
             "parse_mode": "HTML",
             "disable_web_page_preview": True,
         }
+        if reply_to:
+            payload["reply_parameters"] = {"message_id": reply_to, "allow_sending_without_reply": True}
         if buttons:
             payload["reply_markup"] = {
                 "inline_keyboard": [[{"text": label, "url": url} for label, url in row] for row in buttons]
             }
         try:
-            await self._call("sendMessage", payload)
+            result = await self._call("sendMessage", payload)
+            return result.get("message_id")
         except Exception as exc:
             log.error("Failed to send Telegram message: %s", exc)
+            return None
 
     async def member_count(self, username: str) -> int | None:
         """Member count of a public group or channel, or None if it can't be read."""

@@ -73,6 +73,22 @@ class TrackerConfig:
 
 
 @dataclass
+class WatchConfig:
+    interval_seconds: int = 60
+    # Every alert gets a rug-only watch (liquidity pulled) for this long.
+    alert_rug_watch_hours: float = 24
+    # Coins marked with /bought get the full watch for this long, or until /sold.
+    position_watch_hours: float = 72
+    milestones: list[float] = field(default_factory=lambda: [2, 5, 10])
+    dip_from_peak_pct: float = 30
+    sell_ratio: float = 3
+    sell_min_count: int = 10
+    sell_price_drop_pct: float = 10
+    pressure_cooldown_minutes: float = 30
+    liquidity_drop_pct: float = 50
+
+
+@dataclass
 class ApiConfig:
     dexscreener: str = "https://api.dexscreener.com"
     rugcheck: str = "https://api.rugcheck.xyz"
@@ -90,6 +106,7 @@ class Config:
     tier1: Tier1Config = field(default_factory=Tier1Config)
     socials: SocialsConfig = field(default_factory=SocialsConfig)
     tracker: TrackerConfig = field(default_factory=TrackerConfig)
+    watch: WatchConfig = field(default_factory=WatchConfig)
     apis: ApiConfig = field(default_factory=ApiConfig)
     database: str = "data/screener.db"
     telegram_bot_token: str = ""
@@ -104,6 +121,7 @@ _SECTIONS = {
     "tier1": Tier1Config,
     "socials": SocialsConfig,
     "tracker": TrackerConfig,
+    "watch": WatchConfig,
     "apis": ApiConfig,
 }
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 import time
 from datetime import datetime, timezone
 from html import escape
@@ -25,16 +26,21 @@ from .sources.pumpportal import stream_migrations
 from .sources.rugcheck import RugCheck
 from .telegram import Telegram
 from .tracker import build_report, take_snapshots
+from .watch import Watch, evaluate
 
 log = logging.getLogger(__name__)
 
 WEEK = 7 * 86400
+SOLANA_ADDRESS = re.compile(r"^[1-9A-HJ-NP-Za-km-z]{32,44}$")
 HELP = (
     "/status – watchlist and decision counts\n"
     "/stats – how alerts performed vs rejected coins (all time)\n"
     "/week – same, last 7 days\n"
     "/recent – last 10 alerts\n"
     "/rejects – which rug checks reject coins most, with examples\n"
+    "/bought – reply to an alert (or add the address or $SYMBOL) to watch your position\n"
+    "/sold – stop watching a coin (reply, address or $SYMBOL)\n"
+    "/positions – coins you're holding and how they're doing\n"
     "/pause – stop sending alerts (screening and tracking continue)\n"
     "/resume – start sending alerts again"
 )
@@ -170,7 +176,18 @@ class Screener:
             log.info("Paused, not sending alert for %s", market.symbol)
         else:
             log.info("ALERT %s (%s)", market.symbol, market.address)
-            await self.tg.send(text, buttons)
+            message_id = await self.tg.send(text, buttons)
+            # Rug-only watch on every alert; /bought upgrades it to the full watch.
+            watch = Watch(
+                address=market.address,
+                symbol=market.symbol,
+                started_at=time.time(),
+                entry_price=market.price_usd,
+                entry_mcap=market.market_cap_usd,
+                max_liquidity=market.liquidity_usd,
+                alert_message_id=message_id,
+            )
+            self.db.save_watch(watch.to_values())
 
     # --- tracker and reports --------------------------------------------
 
@@ -246,6 +263,95 @@ class Screener:
             return "▶️ Alerts resumed."
         return HELP
 
+    # --- position watch ------------------------------------------------
+
+    async def check_watches(self) -> None:
+        wc = self.cfg.watch
+        now = time.time()
+        watches = [
+            Watch.from_row(r)
+            for r in self.db.active_watches(wc.alert_rug_watch_hours, wc.position_watch_hours, now)
+        ]
+        if not watches:
+            return
+        markets = await self.dex.markets([w.address for w in watches])
+        paused = self.db.get_meta("paused") == "1"
+        for w in watches:
+            messages = evaluate(w, markets.get(w.address), wc, now)
+            self.db.save_watch(w.to_values())
+            if paused and not w.bought:
+                continue  # paused silences alerts, but never warnings about coins you hold
+            for text in messages:
+                if not w.alert_message_id:
+                    text += f"\n<code>{w.address}</code>"
+                await self.tg.send(text, reply_to=w.alert_message_id)
+
+    def _resolve_coin(self, arg: str, reply_to: int | None) -> str | None:
+        if reply_to:
+            row = self.db.watch_for_message(reply_to)
+            if row:
+                return row["address"]
+        arg = arg.strip().lstrip("$")
+        if SOLANA_ADDRESS.match(arg):
+            return arg
+        return self.db.alerted_by_symbol(arg) if arg else None
+
+    async def handle_message(self, text: str, reply_to: int | None = None) -> str:
+        """Commands that need live data; everything else goes to handle_command."""
+        parts = text.split(maxsplit=1)
+        cmd = parts[0].split("@")[0].lower() if parts else ""
+        arg = parts[1] if len(parts) > 1 else ""
+        if cmd not in ("/bought", "/sold", "/positions"):
+            return self.handle_command(text)
+
+        if cmd == "/positions":
+            rows = self.db.positions()
+            if not rows:
+                return "No positions. Reply /bought to an alert after you buy."
+            markets = await self.dex.markets([r["address"] for r in rows])
+            lines = ["<b>Your positions</b>"]
+            for r in rows:
+                m = markets.get(r["address"])
+                now_mcap = m.market_cap_usd if m else None
+                multiple = (
+                    f"{m.price_usd / r['entry_price']:.2f}x"
+                    if m and m.price_usd and r["entry_price"] else "?"
+                )
+                lines.append(
+                    f"${escape(r['symbol'] or '?')} · {multiple} · MC {usd(r['entry_mcap'])} → "
+                    f"{usd(now_mcap)} (peak {usd(r['peak_mcap'])})"
+                )
+            return "\n".join(lines)
+
+        address = self._resolve_coin(arg, reply_to)
+        if not address:
+            return (
+                f"Which coin? Reply {cmd} to the alert, or send {cmd} followed by the "
+                "token address or $SYMBOL."
+            )
+
+        if cmd == "/sold":
+            row = self.db.get_watch(address)
+            if not row or not row["active"]:
+                return "I wasn't watching that coin."
+            self.db.stop_watch(address)
+            return f"Stopped watching ${escape(row['symbol'] or '?')}."
+
+        market = (await self.dex.markets([address])).get(address)
+        if not market or not market.price_usd:
+            return "Couldn't get a price for that coin right now. Try again in a minute."
+        row = self.db.get_watch(address)
+        watch = Watch.from_row(row) if row else Watch(address=address, symbol=market.symbol, started_at=time.time())
+        watch.start_position(market, time.time())
+        self.db.save_watch(watch.to_values())
+        wc = self.cfg.watch
+        milestones = "/".join(f"{m:g}x" for m in sorted(wc.milestones))
+        return (
+            f"✅ Watching ${escape(market.symbol)} from MC {usd(market.market_cap_usd)}.\n"
+            f"I'll message you at {milestones}, a {wc.dip_from_peak_pct:g}% drop from its peak, "
+            f"heavy selling, or liquidity being pulled. Send /sold when you exit."
+        )
+
     async def command_loop(self) -> None:
         if not self.tg.enabled:
             return
@@ -259,7 +365,8 @@ class Screener:
                     if str((msg.get("chat") or {}).get("id")) != self.cfg.telegram_chat_id:
                         continue
                     if (msg.get("text") or "").startswith("/"):
-                        await self.tg.send(self.handle_command(msg["text"]))
+                        reply_to = (msg.get("reply_to_message") or {}).get("message_id")
+                        await self.tg.send(await self.handle_message(msg["text"], reply_to))
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
@@ -325,6 +432,7 @@ class Screener:
         tasks = [
             self._every(self.cfg.discovery.poll_interval_seconds, self.run_cycle, "Screening cycle"),
             self._every(self.cfg.tracker.interval_seconds, self.track, "Tracker"),
+            self._every(self.cfg.watch.interval_seconds, self.check_watches, "Position watch"),
             self.command_loop(),
         ]
         if self.cfg.discovery.pumpportal_migrations:

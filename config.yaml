@@ -69,6 +69,25 @@ tracker:
   track_rejected: true
   weekly_summary: true
 
+# Follow-up messages after an alert. Rug warnings go out for every alert;
+# milestones, dips and sell pressure only for coins you mark with /bought.
+watch:
+  interval_seconds: 60
+  alert_rug_watch_hours: 24
+  position_watch_hours: 72
+  # Messages when price reaches these multiples of your entry.
+  milestones: [2, 5, 10]
+  # Warn when price falls this far from its highest point since you bought.
+  dip_from_peak_pct: 30
+  # Warn when sells outnumber buys this many times over in the last 5 minutes,
+  # with at least sell_min_count sells and price down sell_price_drop_pct.
+  sell_ratio: 3
+  sell_min_count: 10
+  sell_price_drop_pct: 10
+  pressure_cooldown_minutes: 30
+  # Warn when liquidity falls this far below its highest level (possible rug).
+  liquidity_drop_pct: 50
+
 apis:
   dexscreener: https://api.dexscreener.com
   rugcheck: https://api.rugcheck.xyz

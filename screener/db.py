@@ -43,6 +43,24 @@ CREATE TABLE IF NOT EXISTS websites (
     PRIMARY KEY (url, address)
 );
 
+CREATE TABLE IF NOT EXISTS watches (
+    address          TEXT PRIMARY KEY,
+    symbol           TEXT,
+    bought           INTEGER NOT NULL DEFAULT 0,  -- 1 after /bought: full watch, else rug-only
+    active           INTEGER NOT NULL DEFAULT 1,
+    started_at       REAL NOT NULL,               -- alert time, or /bought time
+    entry_price      REAL,
+    entry_mcap       REAL,
+    peak_price       REAL,
+    peak_mcap        REAL,
+    max_liquidity    REAL,
+    sent             TEXT,                        -- JSON list of one-off events already sent
+    dip_peak         REAL,                        -- peak price when the last dip warning went out
+    last_pressure_at REAL,
+    alert_message_id INTEGER
+);
+CREATE INDEX IF NOT EXISTS watches_message ON watches(alert_message_id);
+
 CREATE TABLE IF NOT EXISTS meta (
     key   TEXT PRIMARY KEY,
     value TEXT
@@ -280,6 +298,57 @@ class Database:
         self.set_meta("fixed_token2022_v1", "1")
         self.conn.commit()
         return requeued
+
+    # --- watches (follow-ups after an alert) ----------------------------
+
+    WATCH_FIELDS = (
+        "address", "symbol", "bought", "active", "started_at", "entry_price", "entry_mcap",
+        "peak_price", "peak_mcap", "max_liquidity", "sent", "dip_peak", "last_pressure_at",
+        "alert_message_id",
+    )
+
+    def save_watch(self, values: dict[str, Any]) -> None:
+        cols = ", ".join(self.WATCH_FIELDS)
+        marks = ", ".join("?" * len(self.WATCH_FIELDS))
+        self.conn.execute(
+            f"INSERT OR REPLACE INTO watches ({cols}) VALUES ({marks})",
+            tuple(values.get(f) for f in self.WATCH_FIELDS),
+        )
+        self.conn.commit()
+
+    def get_watch(self, address: str) -> sqlite3.Row | None:
+        return self.conn.execute("SELECT * FROM watches WHERE address = ?", (address,)).fetchone()
+
+    def watch_for_message(self, message_id: int) -> sqlite3.Row | None:
+        return self.conn.execute(
+            "SELECT * FROM watches WHERE alert_message_id = ?", (message_id,)
+        ).fetchone()
+
+    def active_watches(self, alert_hours: float, position_hours: float, now: float) -> list[sqlite3.Row]:
+        """Bought coins within the position window, plus rug-only watches within the alert window."""
+        return list(self.conn.execute(
+            "SELECT * FROM watches WHERE active = 1 AND ("
+            " (bought = 1 AND started_at >= ?) OR (bought = 0 AND started_at >= ?))",
+            (now - position_hours * 3600, now - alert_hours * 3600),
+        ))
+
+    def positions(self) -> list[sqlite3.Row]:
+        return list(self.conn.execute(
+            "SELECT * FROM watches WHERE bought = 1 AND active = 1 ORDER BY started_at DESC"
+        ))
+
+    def stop_watch(self, address: str) -> None:
+        self.conn.execute("UPDATE watches SET active = 0 WHERE address = ?", (address,))
+        self.conn.commit()
+
+    def alerted_by_symbol(self, symbol: str) -> str | None:
+        """Address of the most recent alerted coin with this symbol."""
+        row = self.conn.execute(
+            "SELECT address FROM tokens WHERE status = 'alerted' AND LOWER(symbol) = LOWER(?)"
+            " ORDER BY decided_at DESC LIMIT 1",
+            (symbol,),
+        ).fetchone()
+        return row["address"] if row else None
 
     # --- meta ------------------------------------------------------------
 
