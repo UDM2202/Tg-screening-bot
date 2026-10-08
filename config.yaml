@@ -9,8 +9,9 @@ discovery:
   # Pump.fun tokens graduating to an AMM pool, streamed from PumpPortal (free websocket).
   pumpportal_migrations: true
   # New pools on Raydium, PumpSwap and Meteora via a Helius websocket.
-  # Needs HELIUS_API_KEY in .env; skipped when the key is missing.
-  helius_new_pools: true
+  # Needs HELIUS_API_KEY in .env. Off by default: it streams every swap on those
+  # DEXes to spot new pools, which can use 10+ GB of data a day.
+  helius_new_pools: false
   helius_programs: [raydium_amm_v4, raydium_cpmm, pumpswap, meteora_dlmm]
   # Tokens are re-checked every cycle until they pass, get rejected or age out.
   max_watchlist: 3000

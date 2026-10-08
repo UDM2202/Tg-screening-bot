@@ -16,7 +16,7 @@ It also records the price of every coin it judged 1h, 24h and 7d later, for aler
   migrations)      or turns 24h old)                             (price at 1h/24h/7d)
 ```
 
-1. **Discovery.** Every 60s it pulls DexScreener's latest token profiles and boosts. It also streams pump.fun tokens that graduate to an AMM pool, from PumpPortal's free websocket. With a Helius API key, it also watches new pools on Raydium (AMM v4 and CPMM), PumpSwap and Meteora DLMM as they're created. New tokens go on a watchlist.
+1. **Discovery.** Every 60s it pulls DexScreener's latest token profiles and boosts. It also streams pump.fun tokens that graduate to an AMM pool, from PumpPortal's free websocket. Optionally (off by default), it also uses Helius to watch new pools on Raydium (AMM v4 and CPMM), PumpSwap and Meteora DLMM as they're created. New tokens go on a watchlist.
 2. **Tier 2 market filter (cheap).** Uses DexScreener data only. Tokens that fail are re-checked every cycle until they pass or age out, since a 10-minute-old coin can look very different an hour later. Coins still under $2k liquidity after 2 hours are dropped early.
    - Liquidity ≥ $8k
    - Market cap $30k to $1.5M
@@ -56,9 +56,11 @@ You need Python 3.11+.
    python -m screener --once     # one screening cycle, then exit (good for testing)
    python -m screener --stats    # print the tracker report
    ```
-   Without a Telegram token, alerts print to the console instead. Without `HELIUS_API_KEY`, the Helius source is skipped and the rest still runs.
+   Without a Telegram token, alerts print to the console instead. The Helius source is off by default (see below); the rest needs no extra keys.
 
 ### Helius new-pool discovery
+
+**Off by default because of data usage.** Watching for new pools means streaming every swap on those DEXes, which used over 10 GB a day in testing on a phone. Only turn it on (`helius_new_pools: true` in `config.yaml`) on a server or an unmetered connection. `/status` shows how much data each source uses.
 
 Get a key at [dashboard.helius.dev](https://dashboard.helius.dev) and put it in `.env` as `HELIUS_API_KEY`. The free plan is enough. The bot opens a websocket to Helius and uses `logsSubscribe` (standard Solana RPC) on each pool program. When a log shows a pool being created, it fetches that transaction with `getTransaction` to find the token's mint.
 
@@ -95,7 +97,7 @@ Every data source used here has a free tier: DexScreener, RugCheck, GoPlus, Jupi
 
 ## Known limits
 
-- **Discovery coverage.** Without a Helius key, the bot only sees tokens with a paid DexScreener profile or boost, plus pump.fun graduations. Even with Helius, it only watches the four pool programs listed in `config.yaml`, so launches on other DEXes are missed.
+- **Discovery coverage.** With Helius off (the default), the bot only sees tokens with a paid DexScreener profile or boost, plus pump.fun graduations. Even with Helius, it only watches the four pool programs listed in `config.yaml`, so launches on other DEXes are missed.
 - **The sell check is a quote, not an on-chain simulation.** It catches missing sell routes and heavy sell taxes. The freeze authority and Token-2022 checks cover the main ways a token blocks selling on-chain.
 - **API shapes change.** The parsers are defensive, but if a source changes its response format, a check may start failing. Failures retry next cycle instead of letting a token through. Watch the logs after you first deploy.
 - **Holder data comes from RugCheck's top-holder list.** Wallets that split a large bag across many small wallets won't trip the concentration rule.

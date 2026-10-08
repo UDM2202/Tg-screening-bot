@@ -10,6 +10,7 @@ import re
 
 import httpx
 
+from . import usage
 from .app import Screener
 from .config import load_config
 from .db import Database
@@ -32,7 +33,8 @@ async def main() -> None:
     cfg = load_config(args.config)
     db = Database(cfg.database)
     headers = {"User-Agent": "tg-screening-bot/1.0"}
-    async with httpx.AsyncClient(timeout=20, headers=headers) as client:
+    hooks = {"response": [usage.count_response]}
+    async with httpx.AsyncClient(timeout=20, headers=headers, event_hooks=hooks) as client:
         screener = Screener(cfg, client, db)
         if args.stats:
             print(html.unescape(re.sub(r"<[^>]+>", "", screener.report())))

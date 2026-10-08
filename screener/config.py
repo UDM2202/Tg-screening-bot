@@ -16,7 +16,7 @@ class DiscoveryConfig:
     dexscreener_profiles: bool = True
     dexscreener_boosts: bool = True
     pumpportal_migrations: bool = True
-    helius_new_pools: bool = True
+    helius_new_pools: bool = False
     helius_programs: list[str] = field(
         default_factory=lambda: ["raydium_amm_v4", "raydium_cpmm", "pumpswap", "meteora_dlmm"]
     )

@@ -17,6 +17,7 @@ from typing import Any
 import httpx
 import websockets
 
+from .. import usage
 from ..http import ApiError
 
 log = logging.getLogger(__name__)
@@ -166,6 +167,7 @@ class HeliusPools:
                         }))
                     delay = 5
                     async for raw in ws:
+                        usage.add("helius websocket", len(raw))
                         try:
                             msg = json.loads(raw)
                         except ValueError:

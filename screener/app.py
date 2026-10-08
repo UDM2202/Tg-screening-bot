@@ -13,6 +13,7 @@ from html import escape
 import httpx
 
 from . import socials as socials_mod
+from . import usage
 from .alerts import age_text, format_alert, usd
 from .config import Config
 from .db import Database
@@ -228,6 +229,8 @@ class Screener:
                 f"Rejected by rug checks: {counts.get('rejected', 0)}\n"
                 f"Aged out: {counts.get('expired', 0)}\n\n"
                 + self.speed_report()
+                + "\n\n"
+                + usage.report()
             )
         if cmd == "/stats":
             return self.report()

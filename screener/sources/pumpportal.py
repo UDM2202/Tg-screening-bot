@@ -9,6 +9,8 @@ from collections.abc import Awaitable, Callable
 
 import websockets
 
+from .. import usage
+
 log = logging.getLogger(__name__)
 
 
@@ -22,6 +24,7 @@ async def stream_migrations(url: str, on_token: Callable[[str], Awaitable[None]]
                 log.info("Connected to PumpPortal migrations")
                 delay = 5
                 async for raw in ws:
+                    usage.add("pumpportal websocket", len(raw))
                     try:
                         msg = json.loads(raw)
                     except ValueError:
