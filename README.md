@@ -24,6 +24,7 @@ It also records the price of every coin it judged 1h, 24h and 7d later, for aler
    - Age 15 min to 24 h
    - 24h volume ≥ 1× liquidity
    - Not more than 50% below the highest market cap the bot has seen for it. This stops alerts right after a dump, when the dump's own volume would otherwise make the coin pass.
+   - Not down 20% or more in the last 5 minutes, which means someone is dumping right now.
 3. **Tier 1 rug checks (hard rejects).** These run only on tokens that pass Tier 2. A token that fails here is rejected for good.
    - Mint authority and freeze authority revoked (RugCheck, with GoPlus as a second opinion)
    - ≥ 90% of LP locked or burned (liquidity-weighted across pools)

@@ -53,6 +53,8 @@ def tier2(market: Market, cfg: Tier2Config, now: datetime, peak_mcap: float | No
         reasons.append(f"24h volume {market.volume_h24 / liq:.2f}x liquidity")
     if peak_mcap and mcap is not None and mcap < peak_mcap * (1 - cfg.max_drop_from_peak_pct / 100):
         reasons.append(f"down {(1 - mcap / peak_mcap) * 100:.0f}% from its peak of ${peak_mcap:,.0f}")
+    if market.price_change_m5 is not None and market.price_change_m5 <= -cfg.max_drop_5m_pct:
+        reasons.append(f"dropped {-market.price_change_m5:.0f}% in the last 5 minutes")
     if cfg.require_any_social and not (market.websites or market.socials):
         reasons.append("no socials")
     return Tier2Result(not reasons, False, reasons)

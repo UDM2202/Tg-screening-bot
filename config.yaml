@@ -32,6 +32,9 @@ tier2:
   # Skip coins trading this far below the highest market cap the bot has seen for
   # them. Stops alerts right after a dump, when the dump's volume makes a coin pass.
   max_drop_from_peak_pct: 50
+  # Don't alert while the price has fallen this much in the last 5 minutes:
+  # someone is dumping right now. The coin is re-checked next minute.
+  max_drop_5m_pct: 20
   # Socials are a soft score by default. Set true to drop tokens with no links at all.
   require_any_social: false
 

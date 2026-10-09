@@ -129,3 +129,14 @@ def test_tier2_skips_coins_far_below_their_peak():
     r = tier2(m, cfg, NOW(), peak_mcap=1_300_000)
     assert not r.passed and not r.expired
     assert "down 92% from its peak of $1,300,000" in r.reasons
+
+
+def test_tier2_waits_out_an_active_dump():
+    p = pair(GOOD)
+    p["priceChange"]["m5"] = -33.0
+    m = parse_market(GOOD, [p])
+    r = tier2(m, Tier2Config(), NOW())
+    assert not r.passed and not r.expired
+    assert "dropped 33% in the last 5 minutes" in r.reasons
+    p["priceChange"]["m5"] = -10.0
+    assert tier2(parse_market(GOOD, [p]), Tier2Config(), NOW()).passed
