@@ -79,6 +79,40 @@ def insider_count(details_json: str | None) -> int | None:
     return 0
 
 
+def _insider_bucket(row) -> str | None:
+    insiders = insider_count(row["details"])
+    if insiders is None:
+        return None
+    return f"0-{INSIDER_SPLIT} insiders" if insiders <= INSIDER_SPLIT else f"{INSIDER_SPLIT + 1}+ insiders"
+
+
+def _mcap_bucket(row) -> str | None:
+    mcap = row["ref_mcap"]
+    if mcap is None:
+        return None
+    if mcap < 100_000:
+        return "under $100k"
+    return "$100k-$300k" if mcap < 300_000 else "over $300k"
+
+
+def _pump_bucket(row) -> str | None:
+    change = json.loads(row["details"] or "{}").get("change_h1")
+    if change is None:
+        return None  # only recorded for alerts since this breakdown was added
+    if change < 0:
+        return "falling"
+    return "up 0-100%" if change < 100 else "up over 100%"
+
+
+# Ways to split alerted coins in /stats: (title, row labels in order, labeller).
+ALERT_BREAKDOWNS = [
+    ("Alerts by market cap at alert", ["under $100k", "$100k-$300k", "over $300k"], _mcap_bucket),
+    ("Alerts by price change in the hour before", ["falling", "up 0-100%", "up over 100%"], _pump_bucket),
+    ("Alerts by insider wallets", [f"0-{INSIDER_SPLIT} insiders", f"{INSIDER_SPLIT + 1}+ insiders"],
+     _insider_bucket),
+]
+
+
 ROW = "{:<15}{:>4}{:>8}{:>6}{:>6}{:>6}"
 HEADER = ROW.format("", "n", "median", "up", "2x", "-50%")
 
@@ -95,17 +129,17 @@ def _row(label: str, returns: list[float]) -> str:
 def build_report(db: Database, checkpoints: list[str], since: float = 0, title: str = "Tracker") -> str:
     groups: dict[tuple[str, str], list[float]] = defaultdict(list)
     by_reason: dict[tuple[str, str], list[float]] = defaultdict(list)
-    by_insiders: dict[tuple[str, str], list[float]] = defaultdict(list)
+    breakdowns: list[dict[tuple[str, str], list[float]]] = [defaultdict(list) for _ in ALERT_BREAKDOWNS]
     for row in db.outcomes(since):
         r = outcome_return(row["ref_price"], row["price"], row["liquidity"])
         if r is None:
             continue
         groups[(row["status"], row["checkpoint"])].append(r)
         if row["status"] == "alerted":
-            insiders = insider_count(row["details"])
-            if insiders is not None:
-                bucket = f"0-{INSIDER_SPLIT}" if insiders <= INSIDER_SPLIT else f"{INSIDER_SPLIT + 1}+"
-                by_insiders[(bucket, row["checkpoint"])].append(r)
+            for (_, _, labeller), groups_by in zip(ALERT_BREAKDOWNS, breakdowns):
+                label = labeller(row)
+                if label is not None:
+                    groups_by[(label, row["checkpoint"])].append(r)
         if row["status"] == "rejected":
             for code in json.loads(row["reject_codes"] or "[]"):
                 by_reason[(code, row["checkpoint"])].append(r)
@@ -130,19 +164,20 @@ def build_report(db: Database, checkpoints: list[str], since: float = 0, title: 
         for code in reasons:
             if by_reason[(code, cp)]:
                 lines.append(_row(code[:15], by_reason[(code, cp)]))
-    buckets = [f"0-{INSIDER_SPLIT}", f"{INSIDER_SPLIT + 1}+"]
-    if by_insiders:
-        # Many insider wallets can hide a coordinated holding that the top-10 rule misses.
+    for (heading, labels, _), groups_by in zip(ALERT_BREAKDOWNS, breakdowns):
+        if not groups_by:
+            continue
+        # Use the latest checkpoint that has data for this breakdown.
         cp = max(
-            (c for c in checkpoints if any(by_insiders[(b, c)] for b in buckets)),
+            (c for c in checkpoints if any(groups_by[(label, c)] for label in labels)),
             key=checkpoints.index,
             default=checkpoints[0],
         )
         lines.append("")
-        lines.append(f"Alerts by insider wallets [{cp}]")
+        lines.append(f"{heading} [{cp}]")
         lines.append(HEADER)
-        for b in buckets:
-            lines.append(_row(f"{b} insiders", by_insiders[(b, cp)]))
+        for label in labels:
+            lines.append(_row(label, groups_by[(label, cp)]))
     lines.append("</pre>")
     lines.append("<i>pass = alerted, fail = passed the market filter but failed a rug check. "
                  "Returns are from the price at decision time; dead pools count as -100%.</i>")

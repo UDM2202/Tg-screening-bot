@@ -105,6 +105,8 @@ async def test_full_cycle_alerts_only_the_clean_token(setup):
         assert re.search(r"pass\s+1\s+\+100%", report), report
         assert "mint_authority" in report
         assert re.search(r"Alerts by insider wallets \[1h\]\n\s+n.*\n0-20 insiders\s+1\s+\+100%", report), report
+        assert re.search(r"Alerts by market cap at alert \[1h\]\n\s+n.*\n(.*\n){1}\$100k-\$300k\s+1\s+\+100%", report), report
+        assert re.search(r"price change in the hour before \[1h\]\n\s+n.*\n.*\nup 0-100%\s+1\s+\+100%", report), report
         assert "waiting for their checkpoint: 1h: 0 · 24h: 1 · 7d: 1" in report
         rejects = s.handle_command("/rejects")
         assert "Rejected coins: 1" in rejects

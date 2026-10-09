@@ -171,6 +171,7 @@ class Screener:
                 "socials": socials.score,
                 "age_minutes": market.age_minutes(datetime.now(timezone.utc)),
                 "insiders": rug.insiders_detected,
+                "change_h1": market.price_change_h1,
             },
             **decision,
         )

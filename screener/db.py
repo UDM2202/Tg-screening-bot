@@ -254,7 +254,7 @@ class Database:
         """One row per (decided token, checkpoint) with the baseline and snapshot."""
         return list(
             self.conn.execute(
-                "SELECT t.address, t.symbol, t.status, t.reject_codes, t.details, t.ref_price, t.decided_at,"
+                "SELECT t.address, t.symbol, t.status, t.reject_codes, t.details, t.ref_price, t.ref_mcap, t.decided_at,"
                 " s.checkpoint, s.price, s.liquidity"
                 " FROM tokens t JOIN snapshots s ON s.address = t.address"
                 " WHERE t.status IN ('alerted', 'rejected') AND s.missed = 0 AND t.decided_at >= ?",
