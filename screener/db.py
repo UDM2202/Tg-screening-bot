@@ -394,8 +394,9 @@ class Database:
     def paper_closed(self, checkpoint: str) -> list[sqlite3.Row]:
         """Alerts with a recorded price at the given checkpoint, with their paper marks."""
         return list(self.conn.execute(
-            "SELECT t.address, t.ref_price, t.paper_tp_at, t.paper_stop_at, t.paper_stop_return,"
-            " s.price, s.liquidity FROM tokens t JOIN snapshots s ON s.address = t.address"
+            "SELECT t.address, t.decided_at, t.ref_price, t.paper_tp_at, t.paper_stop_at,"
+            " t.paper_stop_return, s.price, s.liquidity"
+            " FROM tokens t JOIN snapshots s ON s.address = t.address"
             " WHERE t.status = 'alerted' AND s.checkpoint = ? AND s.missed = 0",
             (checkpoint,),
         ))

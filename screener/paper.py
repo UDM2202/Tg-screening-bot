@@ -17,10 +17,14 @@ from .tracker import DEAD_LIQUIDITY_USD, outcome_return
 
 WINDOW_HOURS = 24
 HOLD_CHECKPOINT = "24h"
+# When this bot first started recording paper marks. Earlier alerts have no marks.
+STARTED_KEY = "paper_started_at"
 
 
 def record_marks(db: Database, markets: dict[str, Market], cfg: PaperConfig, now: float) -> None:
     """Note the first take-profit and stop-loss hits for alerts in their 24h window."""
+    if db.get_meta(STARTED_KEY) is None:
+        db.set_meta(STARTED_KEY, str(now))
     for row in db.paper_open(now - WINDOW_HOURS * 3600):
         ref = row["ref_price"]
         if not ref:
@@ -50,20 +54,28 @@ def _strategy_returns(row, cfg: PaperConfig) -> dict[str, float]:
 
 
 def report(db: Database, cfg: PaperConfig) -> str:
-    rows = [r for r in db.paper_closed(HOLD_CHECKPOINT) if r["ref_price"]]
+    started = float(db.get_meta(STARTED_KEY) or "inf")
+    closed = [r for r in db.paper_closed(HOLD_CHECKPOINT) if r["ref_price"]]
+    # Only alerts whose whole window was tracked; older ones would look like pure holds.
+    rows = [r for r in closed if r["decided_at"] >= started]
+    skipped = len(closed) - len(rows)
     fee = cfg.fee_pct / 100
     head = (
         f"📒 <b>Paper trading</b>: ${cfg.stake_usd:g} on every alert, {cfg.fee_pct:g}% fees per trade"
     )
+    note = (
+        f"\n{skipped} older alert(s) skipped: they were sent before paper tracking started."
+        if skipped else ""
+    )
     if not rows:
-        return head + "\n\nNo closed trades yet. A trade closes 24h after its alert."
+        return head + "\n\nNo closed trades yet. A trade closes 24h after its alert." + note
 
     names = {
         "hold": "Hold 24h",
         "tp": f"Sell at {cfg.take_profit_x:g}x",
         "both": f"{cfg.take_profit_x:g}x or stop -{cfg.stop_loss_pct:g}%",
     }
-    lines = [head, f"Closed trades: {len(rows)} (alerts at least 24h old)", "<pre>"]
+    lines = [head, f"Closed trades: {len(rows)} (alerts at least 24h old){note}", "<pre>"]
     lines.append(f"{'strategy':<17}{'P&L':>9}{'avg':>8}{'wins':>6}")
     for key, name in names.items():
         pnl = [cfg.stake_usd * (_strategy_returns(r, cfg)[key] - fee) for r in rows]

@@ -23,6 +23,7 @@ def alert(db, addr, now, price=1.0):
 def test_strategies_on_three_typical_coins():
     db = Database(":memory:")
     t0 = time.time() - 25 * 3600
+    db.set_meta(paper.STARTED_KEY, str(t0 - 1))  # tracking was running before these alerts
     for a in ("pump", "rug", "fade"):
         alert(db, a, t0)
 
@@ -49,6 +50,7 @@ def test_strategies_on_three_typical_coins():
 def test_stop_before_take_profit_counts_as_the_loss():
     db = Database(":memory:")
     t0 = time.time() - 25 * 3600
+    db.set_meta(paper.STARTED_KEY, str(t0 - 1))  # tracking was running before these alerts
     alert(db, "a", t0)
     paper.record_marks(db, {"a": market("a", 0.45)}, CFG, t0 + 60)   # stop first
     paper.record_marks(db, {"a": market("a", 3.0)}, CFG, t0 + 120)   # then 3x
@@ -62,3 +64,18 @@ def test_stop_before_take_profit_counts_as_the_loss():
 def test_no_closed_trades_yet():
     db = Database(":memory:")
     assert "No closed trades yet" in paper.report(db, CFG)
+
+
+def test_alerts_before_tracking_started_are_skipped():
+    db = Database(":memory:")
+    t0 = time.time() - 30 * 3600
+    alert(db, "old", t0)  # sent before the bot recorded any paper marks
+    db.add_snapshot("old", "24h", 0.1, 20_000, None)
+    paper.record_marks(db, {}, CFG, t0 + 3 * 3600)  # tracking starts here
+    alert(db, "new", t0 + 4 * 3600)
+    paper.record_marks(db, {"new": market("new", 2.2)}, CFG, t0 + 4 * 3600 + 60)
+    db.add_snapshot("new", "24h", 1.0, 20_000, None)
+    report = paper.report(db, CFG)
+    assert "Closed trades: 1 (alerts at least 24h old)" in report
+    assert "1 older alert(s) skipped" in report
+    assert "Reached 2x: 1/1" in report
