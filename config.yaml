@@ -70,11 +70,14 @@ tracker:
   track_rejected: true
   weekly_summary: true
 
-# Follow-up messages after an alert. Rug warnings go out for every alert;
-# milestones, dips and sell pressure only for coins you mark with /bought.
+# Follow-up messages after an alert, sent as replies to it.
+# watch_all_alerts: true sends milestones, dips, sell pressure and rug warnings for
+# every alert (measured from the alert price). false limits those to coins you mark
+# with /bought, and other alerts only get the rug warning.
 watch:
   interval_seconds: 60
-  alert_rug_watch_hours: 24
+  watch_all_alerts: true
+  alert_watch_hours: 24
   position_watch_hours: 72
   # Messages when price reaches these multiples of your entry.
   milestones: [2, 5, 10]

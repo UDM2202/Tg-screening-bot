@@ -1,7 +1,8 @@
 """Follow-up warnings after an alert: milestones, dips, sell pressure and pulled liquidity.
 
-Every alert gets a rug-only watch. Coins marked with /bought get the full set, measured
-from the price when /bought was sent.
+Every alert is watched from its alert price: the full set of warnings when
+watch_all_alerts is on, otherwise only pulled liquidity. /bought restarts the watch from
+the price when it was sent, and keeps it running longer.
 """
 
 from __future__ import annotations
@@ -91,7 +92,8 @@ class Watch:
 def _multiple(w: Watch, price: float) -> str:
     if not w.entry_price:
         return ""
-    return f" Now {price / w.entry_price:.1f}x vs your entry."
+    basis = "your entry" if w.bought else "the alert price"
+    return f" Now {price / w.entry_price:.1f}x vs {basis}."
 
 
 def evaluate(w: Watch, market: Market | None, cfg: WatchConfig, now: float) -> list[str]:
@@ -110,7 +112,8 @@ def evaluate(w: Watch, market: Market | None, cfg: WatchConfig, now: float) -> l
             f"({usd(w.max_liquidity)} → {usd(liquidity)}). Possible rug. Check it now."
         )
 
-    if not w.bought or market is None or not market.price_usd or not w.entry_price:
+    full_watch = w.bought or cfg.watch_all_alerts
+    if not full_watch or market is None or not market.price_usd or not w.entry_price:
         return messages
     price = market.price_usd
     mcap = market.market_cap_usd
@@ -123,9 +126,10 @@ def evaluate(w: Watch, market: Market | None, cfg: WatchConfig, now: float) -> l
     reached = [m for m in sorted(cfg.milestones) if multiple >= m and f"x{m:g}" not in w.sent]
     if reached:
         w.sent.update(f"x{m:g}" for m in reached)
+        since = "since you bought" if w.bought else "since the alert"
+        tip = " Consider taking some profit." if w.bought else ""
         messages.append(
-            f"🚀 {name} hit {reached[-1]:g}x since you bought "
-            f"(MC {usd(w.entry_mcap)} → {usd(mcap)}). Consider taking some profit."
+            f"🚀 {name} hit {reached[-1]:g}x {since} (MC {usd(w.entry_mcap)} → {usd(mcap)}).{tip}"
         )
 
     fall = 1 - price / w.peak_price

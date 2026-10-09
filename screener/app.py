@@ -41,6 +41,7 @@ HELP = (
     "/rejects – which rug checks reject coins most, with examples\n"
     "/bought – reply to an alert (or add the address or $SYMBOL) to watch your position\n"
     "/sold – stop watching a coin (reply, address or $SYMBOL)\n"
+    "/mute – stop follow-ups for an alert (reply to it)\n"
     "/positions – coins you're holding and how they're doing\n"
     "/pause – stop sending alerts (screening and tracking continue)\n"
     "/resume – start sending alerts again"
@@ -273,7 +274,7 @@ class Screener:
         now = time.time()
         watches = [
             Watch.from_row(r)
-            for r in self.db.active_watches(wc.alert_rug_watch_hours, wc.position_watch_hours, now)
+            for r in self.db.active_watches(wc.alert_watch_hours, wc.position_watch_hours, now)
         ]
         if not watches:
             return
@@ -283,7 +284,7 @@ class Screener:
             messages = evaluate(w, markets.get(w.address), wc, now)
             self.db.save_watch(w.to_values())
             if paused and not w.bought:
-                continue  # paused silences alerts, but never warnings about coins you hold
+                continue  # paused silences alerts and their follow-ups, never coins you hold
             for text in messages:
                 if not w.alert_message_id:
                     text += f"\n<code>{w.address}</code>"
@@ -304,7 +305,7 @@ class Screener:
         parts = text.split(maxsplit=1)
         cmd = parts[0].split("@")[0].lower() if parts else ""
         arg = parts[1] if len(parts) > 1 else ""
-        if cmd not in ("/bought", "/sold", "/positions"):
+        if cmd not in ("/bought", "/sold", "/mute", "/positions"):
             return self.handle_command(text)
 
         if cmd == "/positions":
@@ -333,12 +334,13 @@ class Screener:
                 "token address or $SYMBOL."
             )
 
-        if cmd == "/sold":
+        if cmd in ("/sold", "/mute"):
             row = self.db.get_watch(address)
             if not row or not row["active"]:
                 return "I wasn't watching that coin."
             self.db.stop_watch(address)
-            return f"Stopped watching ${escape(row['symbol'] or '?')}."
+            symbol = escape(row["symbol"] or "?")
+            return f"🔕 Muted ${symbol}." if cmd == "/mute" else f"Stopped watching ${symbol}."
 
         market = (await self.dex.markets([address])).get(address)
         if not market or not market.price_usd:

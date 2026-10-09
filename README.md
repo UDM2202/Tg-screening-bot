@@ -34,7 +34,7 @@ It also records the price of every coin it judged 1h, 24h and 7d later, for aler
 4. **Socials (soft score, never a reject).** It checks for a website, X and Telegram, and fetches the Telegram member count. It warns when the website was reused from another token, when the X link is a post instead of an account, when the Telegram group is tiny, or when there are no socials at all.
 5. **Alert.** You get the key stats, the passed checks, any warnings, and one-tap buttons: DexScreener, RugCheck, Solscan, X search and the token's own links.
 6. **Tracker.** Every alerted *and* rejected coin gets its price recorded at 1h, 24h and 7d. `/stats` and the weekly summary compare the two groups and break the rejected coins down by the rule that rejected them. If coins rejected by some rule keep doing well, that rule may be too strict.
-7. **Position watch.** For 24 hours after each alert, the bot warns if the coin's liquidity drops by half or more (a likely rug). Reply `/bought` to an alert after you buy, and for the next 72 hours it also messages you at 2x, 5x and 10x from your entry, when price falls 30% from its peak, and when sells heavily outnumber buys. The warnings react to a dip that has started; they can't predict one. Thresholds are under `watch:` in `config.yaml`.
+7. **Follow-ups.** For 24 hours after each alert, the bot replies to it when the coin reaches 2x, 5x or 10x from the alert price, falls 30% from its peak, sees sells heavily outnumber buys, or loses half its liquidity (a likely rug). Reply `/mute` to an alert to silence it. Reply `/bought` after you buy, and the watch restarts from your entry price and runs for 72 hours. The warnings react to a dip that has started; they can't predict one. Thresholds are under `watch:` in `config.yaml`; set `watch_all_alerts: false` to get only rug warnings for coins you haven't bought.
 
 Every threshold lives in [`config.yaml`](config.yaml).
 
@@ -76,6 +76,7 @@ Each new pool costs about one credit for the transaction lookup. Pick which DEXe
 | `/recent` | Last 10 alerts |
 | `/bought` | Reply to an alert after you buy, or send `/bought <address>` or `/bought $SYMBOL`. Starts the full position watch from the current price. |
 | `/sold` | Stop watching a coin (reply, address or `$SYMBOL`). |
+| `/mute` | Reply to an alert to stop its follow-ups. |
 | `/positions` | Coins you're holding: multiple since entry, current and peak market cap. |
 | `/pause` / `/resume` | Stop or restart alerts. Screening and tracking keep running. |
 

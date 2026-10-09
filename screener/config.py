@@ -75,8 +75,10 @@ class TrackerConfig:
 @dataclass
 class WatchConfig:
     interval_seconds: int = 60
-    # Every alert gets a rug-only watch (liquidity pulled) for this long.
-    alert_rug_watch_hours: float = 24
+    # Every alert is watched for this long. With watch_all_alerts it gets milestones,
+    # dips and sell-pressure warnings too; otherwise only the pulled-liquidity warning.
+    alert_watch_hours: float = 24
+    watch_all_alerts: bool = True
     # Coins marked with /bought get the full watch for this long, or until /sold.
     position_watch_hours: float = 72
     milestones: list[float] = field(default_factory=lambda: [2, 5, 10])

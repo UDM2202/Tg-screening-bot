@@ -176,6 +176,7 @@ async def test_rug_warning_replies_to_alert_for_every_alerted_coin(setup):
 
 async def test_bought_by_reply_then_milestones_dip_and_sold(setup):
     apis, cfg, db = setup
+    cfg.watch.watch_all_alerts = False
     async with httpx.AsyncClient(transport=httpx.MockTransport(apis)) as client:
         s = Screener(cfg, client, db)
         await s.run_cycle()
@@ -224,3 +225,34 @@ async def test_bought_needs_a_coin(setup):
         assert (await s.handle_message("/bought $NOPE")).startswith("Which coin?")
         # Coins the bot never alerted can still be watched by address.
         assert (await s.handle_message(f"/bought {GOOD}")).startswith("✅ Watching $GOOD")
+
+
+async def test_every_alert_gets_follow_ups_by_default_and_mute_stops_them(setup):
+    apis, cfg, db = setup
+    async with httpx.AsyncClient(transport=httpx.MockTransport(apis)) as client:
+        s = Screener(cfg, client, db)
+        await s.run_cycle()
+        alert_id = 101
+
+        apis.price = 0.0005  # 2.5x the alert price, never /bought
+        await s.check_watches()
+        text = apis.sent[-1]["text"]
+        assert text == "🚀 <b>$GOOD</b> hit 2x since the alert (MC $200.0k → $500.0k)."
+        assert apis.sent[-1]["reply_parameters"]["message_id"] == alert_id
+
+        apis.price = 0.0003  # 40% off the peak
+        await s.check_watches()
+        assert "down 40% from its peak (MC $500.0k → $300.0k). Now 1.5x vs the alert price." in apis.sent[-1]["text"]
+
+        assert await s.handle_message("/mute", reply_to=alert_id) == "🔕 Muted $GOOD."
+        count = len(apis.sent)
+        apis.price = 0.0030
+        apis.liq = 1_000
+        await s.check_watches()
+        assert len(apis.sent) == count
+
+        # /pause silences follow-ups on alerts too.
+        db.conn.execute("UPDATE watches SET active = 1")
+        s.handle_command("/pause")
+        await s.check_watches()
+        assert len(apis.sent) == count
