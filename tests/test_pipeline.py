@@ -258,3 +258,39 @@ async def test_every_alert_gets_follow_ups_by_default_and_mute_stops_them(setup)
         s.handle_command("/pause")
         await s.check_watches()
         assert len(apis.sent) == count
+
+
+async def test_coin_alerting_only_after_a_dump_is_skipped(setup):
+    """GTA6 pattern: pumped on tiny volume, dumped 90%, and the dump's volume made it pass."""
+    apis, cfg, db = setup
+    async with httpx.AsyncClient(transport=httpx.MockTransport(apis)) as client:
+        s = Screener(cfg, client, db)
+        apis.price = 0.0013  # MC $1.3M, but volume is too thin to pass
+        real_pair = pair
+
+        def thin(address, **kw):
+            return real_pair(address, **{**kw, "vol": 5_000})
+
+        import tests.test_pipeline as tp
+        tp.pair = thin
+        try:
+            await s.run_cycle()
+        finally:
+            tp.pair = real_pair
+        assert db.status(GOOD) == "watching"
+
+        apis.price = 0.0001  # dumped to MC $100k, with plenty of volume now
+        await s.run_cycle()
+        assert db.status(GOOD) == "watching"
+        assert not any(GOOD in m["text"] for m in apis.sent)
+
+
+async def test_alert_warns_when_somewhat_below_peak(setup):
+    apis, cfg, db = setup
+    async with httpx.AsyncClient(transport=httpx.MockTransport(apis)) as client:
+        s = Screener(cfg, client, db)
+        db.add_token(GOOD, "test")
+        db.touch(GOOD, mcap=300_000)  # seen earlier at $300k, now $200k
+        await s.run_cycle()
+        alert = next(m["text"] for m in apis.sent if GOOD in m["text"])
+        assert "⚠️ 33% below its peak MC of $300.0k" in alert

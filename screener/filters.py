@@ -19,7 +19,7 @@ class Tier2Result:
     reasons: list[str] = field(default_factory=list)
 
 
-def tier2(market: Market, cfg: Tier2Config, now: datetime) -> Tier2Result:
+def tier2(market: Market, cfg: Tier2Config, now: datetime, peak_mcap: float | None = None) -> Tier2Result:
     """Cheap market pre-filter. Failing tokens are re-checked next cycle until they expire."""
     age = market.age_minutes(now)
     if age is not None and age > cfg.max_age_hours * 60:
@@ -51,6 +51,8 @@ def tier2(market: Market, cfg: Tier2Config, now: datetime) -> Tier2Result:
             reasons.append(f"liquidity/mcap {liq / mcap * 100:.1f}% < {cfg.min_liquidity_to_mcap_pct:g}%")
     if liq > 0 and market.volume_h24 / liq < cfg.min_volume_to_liquidity:
         reasons.append(f"24h volume {market.volume_h24 / liq:.2f}x liquidity")
+    if peak_mcap and mcap is not None and mcap < peak_mcap * (1 - cfg.max_drop_from_peak_pct / 100):
+        reasons.append(f"down {(1 - mcap / peak_mcap) * 100:.0f}% from its peak of ${peak_mcap:,.0f}")
     if cfg.require_any_social and not (market.websites or market.socials):
         reasons.append("no socials")
     return Tier2Result(not reasons, False, reasons)

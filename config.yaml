@@ -29,6 +29,9 @@ tier2:
   # never get going, and this keeps them from crowding out the watchlist.
   give_up_below_liquidity_usd: 2000
   give_up_after_minutes: 120
+  # Skip coins trading this far below the highest market cap the bot has seen for
+  # them. Stops alerts right after a dump, when the dump's volume makes a coin pass.
+  max_drop_from_peak_pct: 50
   # Socials are a soft score by default. Set true to drop tokens with no links at all.
   require_any_social: false
 

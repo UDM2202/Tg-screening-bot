@@ -34,6 +34,7 @@ class Tier2Config:
     min_volume_to_liquidity: float = 1.0
     give_up_below_liquidity_usd: float = 2000
     give_up_after_minutes: float = 120
+    max_drop_from_peak_pct: float = 50
     require_any_social: bool = False
 
 

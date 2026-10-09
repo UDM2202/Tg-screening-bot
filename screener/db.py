@@ -22,7 +22,8 @@ CREATE TABLE IF NOT EXISTS tokens (
     ref_mcap     REAL,
     ref_liquidity REAL,
     reject_codes TEXT,  -- JSON list of tier 1 rule codes
-    details      TEXT   -- JSON blob of facts shown in the alert
+    details      TEXT,  -- JSON blob of facts shown in the alert
+    peak_mcap    REAL   -- highest market cap seen while watching
 );
 CREATE INDEX IF NOT EXISTS tokens_status ON tokens(status, first_seen);
 
@@ -76,6 +77,14 @@ class Database:
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA journal_mode=WAL")
         self.conn.executescript(SCHEMA)
+        self._add_missing_columns()
+
+    def _add_missing_columns(self) -> None:
+        """Upgrade databases created by older versions of the bot."""
+        columns = {r["name"] for r in self.conn.execute("PRAGMA table_info(tokens)")}
+        if "peak_mcap" not in columns:
+            self.conn.execute("ALTER TABLE tokens ADD COLUMN peak_mcap REAL")
+            self.conn.commit()
 
     # --- watchlist -------------------------------------------------------
 
@@ -104,13 +113,18 @@ class Database:
         self.conn.commit()
         return cur.rowcount
 
-    def touch(self, address: str, symbol: str | None = None, name: str | None = None) -> None:
+    def touch(
+        self, address: str, symbol: str | None = None, name: str | None = None, mcap: float | None = None
+    ) -> float | None:
+        """Record a check of a watched token and return the highest market cap seen so far."""
         self.conn.execute(
-            "UPDATE tokens SET last_checked = ?, symbol = COALESCE(?, symbol), name = COALESCE(?, name)"
-            " WHERE address = ?",
-            (time.time(), symbol, name, address),
+            "UPDATE tokens SET last_checked = ?, symbol = COALESCE(?, symbol), name = COALESCE(?, name),"
+            " peak_mcap = MAX(COALESCE(peak_mcap, 0), COALESCE(?, 0)) WHERE address = ?",
+            (time.time(), symbol, name, mcap, address),
         )
         self.conn.commit()
+        row = self.conn.execute("SELECT peak_mcap FROM tokens WHERE address = ?", (address,)).fetchone()
+        return row["peak_mcap"] if row and row["peak_mcap"] else None
 
     def set_expired(self, address: str) -> None:
         self.conn.execute("UPDATE tokens SET status = 'expired' WHERE address = ?", (address,))

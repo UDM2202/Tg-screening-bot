@@ -111,8 +111,8 @@ class Screener:
             market = markets.get(addr)
             if market is None:
                 continue  # no pool yet; retried until expire_unseen drops it
-            self.db.touch(addr, market.symbol, market.name)
-            result = tier2(market, self.cfg.tier2, now)
+            peak = self.db.touch(addr, market.symbol, market.name, market.market_cap_usd)
+            result = tier2(market, self.cfg.tier2, now, peak)
             if result.expired:
                 self.db.set_expired(addr)
             elif result.passed:
@@ -158,6 +158,11 @@ class Screener:
                 **decision,
             )
             return
+
+        peak = self.db.touch(market.address, mcap=market.market_cap_usd)
+        if peak and market.market_cap_usd and market.market_cap_usd < peak * 0.8:
+            drop = (1 - market.market_cap_usd / peak) * 100
+            result.warnings.append(f"{drop:.0f}% below its peak MC of {usd(peak)}")
 
         socials = await socials_mod.assess(
             market, self.profile_links.pop(market.address, None), self.db, self.tg, self.cfg.socials

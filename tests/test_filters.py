@@ -119,3 +119,13 @@ def test_goplus_real_traps_still_caught():
     assert fee.traps == ["transfer fee"]
     hook = parse_security(goplus_result(GOOD, transfer_hook=[{"address": "x"}])["result"][GOOD])
     assert hook.traps == ["transfer hook"]
+
+
+def test_tier2_skips_coins_far_below_their_peak():
+    m = market(mcap=100_000, liq=25_000, vol=100_000)
+    cfg = Tier2Config()
+    assert tier2(m, cfg, NOW()).passed
+    assert tier2(m, cfg, NOW(), peak_mcap=180_000).passed  # 44% off the peak
+    r = tier2(m, cfg, NOW(), peak_mcap=1_300_000)
+    assert not r.passed and not r.expired
+    assert "down 92% from its peak of $1,300,000" in r.reasons
