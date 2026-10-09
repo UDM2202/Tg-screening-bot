@@ -291,10 +291,10 @@ async def test_alert_warns_when_somewhat_below_peak(setup):
     async with httpx.AsyncClient(transport=httpx.MockTransport(apis)) as client:
         s = Screener(cfg, client, db)
         db.add_token(GOOD, "test")
-        db.touch(GOOD, mcap=300_000)  # seen earlier at $300k, now $200k
+        db.touch(GOOD, mcap=260_000)  # seen earlier at $260k, now $200k
         await s.run_cycle()
         alert = next(m["text"] for m in apis.sent if GOOD in m["text"])
-        assert "⚠️ 33% below its peak MC of $300.0k" in alert
+        assert "⚠️ 23% below its peak MC of $260.0k" in alert
 
 
 async def test_watch_loop_records_paper_marks_even_when_muted(setup):
@@ -308,3 +308,17 @@ async def test_watch_loop_records_paper_marks_even_when_muted(setup):
         row = db.conn.execute("SELECT paper_tp_at, paper_stop_at FROM tokens WHERE address = ?", (GOOD,)).fetchone()
         assert row["paper_tp_at"] is not None and row["paper_stop_at"] is None
         assert "No closed trades yet" in await s.handle_message("/paper")
+
+
+async def test_why_explains_each_state(setup):
+    apis, cfg, db = setup
+    async with httpx.AsyncClient(transport=httpx.MockTransport(apis)) as client:
+        s = Screener(cfg, client, db)
+        await s.run_cycle()
+        young = await s.handle_message("/why $YNG")
+        assert "👀 On the watchlist" in young and "• younger than 15m" in young
+        rug = await s.handle_message(f"/why {RUG}")
+        assert "❌ Rejected" in rug and "• mint authority not revoked" in rug
+        assert "🟢 Alerted" in await s.handle_message("/why", reply_to=101)
+        assert "haven't seen" in await s.handle_message("/why 11111111111111111111111111111111")
+        assert (await s.handle_message("/why")).startswith("Which coin?")

@@ -44,6 +44,7 @@ HELP = (
     "/mute – stop follow-ups for an alert (reply to it)\n"
     "/positions – coins you're holding and how they're doing\n"
     "/paper – would $5 on every alert have made money? (after fees)\n"
+    "/why – why a coin was or wasn't alerted (address, $SYMBOL, or reply)\n"
     "/pause – stop sending alerts (screening and tracking continue)\n"
     "/resume – start sending alerts again"
 )
@@ -114,6 +115,7 @@ class Screener:
                 continue  # no pool yet; retried until expire_unseen drops it
             peak = self.db.touch(addr, market.symbol, market.name, market.market_cap_usd)
             result = tier2(market, self.cfg.tier2, now, peak)
+            self.db.set_last_reasons(addr, result.reasons)
             if result.expired:
                 self.db.set_expired(addr)
             elif result.passed:
@@ -302,6 +304,39 @@ class Screener:
                     text += f"\n<code>{w.address}</code>"
                 await self.tg.send(text, reply_to=w.alert_message_id)
 
+    def explain(self, address: str | None) -> str:
+        """Plain-language account of where a coin stands and why."""
+        if not address:
+            return "Which coin? Send /why followed by the token address or $SYMBOL, or reply /why to an alert."
+        row = self.db.get_token(address)
+        if not row:
+            return "I haven't seen that coin. It may not have come through any discovery source."
+        name = f"${escape(row['symbol'] or '?')}"
+        status = {
+            "watching": "👀 On the watchlist, re-checked every minute",
+            "alerted": "🟢 Alerted",
+            "rejected": "❌ Rejected by the rug checks",
+            "expired": "⌛ Aged out (stopped watching)",
+        }.get(row["status"], row["status"])
+        lines = [f"<b>{name}</b>", f"<code>{address}</code>", status]
+        if row["last_checked"]:
+            ago = time.time() - row["last_checked"]
+            lines.append(f"Last checked {age_text(ago / 60)} ago")
+        if row["peak_mcap"]:
+            lines.append(f"Highest MC seen: {usd(row['peak_mcap'])}")
+        if row["status"] == "rejected":
+            reasons = json.loads(row["details"] or "{}").get("reasons", [])
+            lines += ["", "<b>Rug checks failed:</b>"] + [f"• {escape(r)}" for r in reasons]
+        elif row["status"] in ("watching", "expired"):
+            reasons = json.loads(row["last_reasons"] or "null")
+            if reasons is None:
+                lines += ["", "No market data yet: DexScreener hasn't listed a pool for it."]
+            elif reasons:
+                lines += ["", "<b>Latest market check failed:</b>"] + [f"• {escape(r)}" for r in reasons]
+            else:
+                lines += ["", "Passed the market check; rug checks are pending or temporarily unavailable."]
+        return "\n".join(lines)
+
     def _resolve_coin(self, arg: str, reply_to: int | None) -> str | None:
         if reply_to:
             row = self.db.watch_for_message(reply_to)
@@ -310,7 +345,9 @@ class Screener:
         arg = arg.strip().lstrip("$")
         if SOLANA_ADDRESS.match(arg):
             return arg
-        return self.db.alerted_by_symbol(arg) if arg else None
+        if not arg:
+            return None
+        return self.db.alerted_by_symbol(arg) or self.db.token_by_symbol(arg)
 
     async def handle_message(self, text: str, reply_to: int | None = None) -> str:
         """Commands that need live data; everything else goes to handle_command."""
@@ -319,6 +356,8 @@ class Screener:
         arg = parts[1] if len(parts) > 1 else ""
         if cmd == "/paper":
             return paper.report(self.db, self.cfg.paper)
+        if cmd == "/why":
+            return self.explain(self._resolve_coin(arg, reply_to))
         if cmd not in ("/bought", "/sold", "/mute", "/positions"):
             return self.handle_command(text)
 

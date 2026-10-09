@@ -26,7 +26,8 @@ CREATE TABLE IF NOT EXISTS tokens (
     peak_mcap    REAL,  -- highest market cap seen while watching
     paper_tp_at  REAL,  -- paper trading: first time price reached the take-profit level
     paper_stop_at REAL, -- paper trading: first time price fell to the stop-loss level
-    paper_stop_return REAL  -- return actually seen when the stop-loss was hit
+    paper_stop_return REAL, -- return actually seen when the stop-loss was hit
+    last_reasons TEXT   -- JSON list: why the latest market check failed (empty = passed)
 );
 CREATE INDEX IF NOT EXISTS tokens_status ON tokens(status, first_seen);
 
@@ -85,9 +86,13 @@ class Database:
     def _add_missing_columns(self) -> None:
         """Upgrade databases created by older versions of the bot."""
         columns = {r["name"] for r in self.conn.execute("PRAGMA table_info(tokens)")}
-        for column in ("peak_mcap", "paper_tp_at", "paper_stop_at", "paper_stop_return"):
+        wanted = {
+            "peak_mcap": "REAL", "paper_tp_at": "REAL", "paper_stop_at": "REAL",
+            "paper_stop_return": "REAL", "last_reasons": "TEXT",
+        }
+        for column, kind in wanted.items():
             if column not in columns:
-                self.conn.execute(f"ALTER TABLE tokens ADD COLUMN {column} REAL")
+                self.conn.execute(f"ALTER TABLE tokens ADD COLUMN {column} {kind}")
         self.conn.commit()
 
     # --- watchlist -------------------------------------------------------
@@ -129,6 +134,23 @@ class Database:
         self.conn.commit()
         row = self.conn.execute("SELECT peak_mcap FROM tokens WHERE address = ?", (address,)).fetchone()
         return row["peak_mcap"] if row and row["peak_mcap"] else None
+
+    def set_last_reasons(self, address: str, reasons: list[str]) -> None:
+        self.conn.execute(
+            "UPDATE tokens SET last_reasons = ? WHERE address = ?", (json.dumps(reasons), address)
+        )
+        self.conn.commit()
+
+    def get_token(self, address: str) -> sqlite3.Row | None:
+        return self.conn.execute("SELECT * FROM tokens WHERE address = ?", (address,)).fetchone()
+
+    def token_by_symbol(self, symbol: str) -> str | None:
+        """Address of the most recently seen token with this symbol, in any state."""
+        row = self.conn.execute(
+            "SELECT address FROM tokens WHERE LOWER(symbol) = LOWER(?) ORDER BY first_seen DESC LIMIT 1",
+            (symbol,),
+        ).fetchone()
+        return row["address"] if row else None
 
     def set_expired(self, address: str) -> None:
         self.conn.execute("UPDATE tokens SET status = 'expired' WHERE address = ?", (address,))

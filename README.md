@@ -23,12 +23,12 @@ It also records the price of every coin it judged 1h, 24h and 7d later, for aler
    - Liquidity ≥ 5% of market cap
    - Age 15 min to 24 h
    - 24h volume ≥ 1× liquidity
-   - Not more than 50% below the highest market cap the bot has seen for it. This stops alerts right after a dump, when the dump's own volume would otherwise make the coin pass.
+   - Not more than 25% below the highest market cap the bot has seen for it. This stops alerts right after a dump, when the dump's own volume would otherwise make the coin pass.
    - Not down 20% or more in the last 5 minutes, which means someone is dumping right now.
 3. **Tier 1 rug checks (hard rejects).** These run only on tokens that pass Tier 2. A token that fails here is rejected for good.
    - Mint authority and freeze authority revoked (RugCheck, with GoPlus as a second opinion)
    - ≥ 90% of LP locked or burned (liquidity-weighted across pools)
-   - Top 10 holders ≤ 20%, no single wallet > 10%, dev wallet ≤ 5% (pool accounts excluded)
+   - Top 10 holders ≤ 20%, no single wallet > 10%, dev wallet ≤ 5% (pool accounts excluded), and no more than 100 linked insider wallets
    - Creator has no rug history and isn't flagged as malicious
    - No RugCheck "danger" risks (configurable ignore list)
    - No Token-2022 traps: transfer fees, transfer hooks, non-transferable, closable, balances editable by an authority
@@ -80,6 +80,7 @@ Each new pool costs about one credit for the transaction lookup. Pick which DEXe
 | `/bought` | Reply to an alert after you buy, or send `/bought <address>` or `/bought $SYMBOL`. Starts the full position watch from the current price. |
 | `/sold` | Stop watching a coin (reply, address or `$SYMBOL`). |
 | `/mute` | Reply to an alert to stop its follow-ups. |
+| `/why` | Why a coin was or wasn't alerted: send the address or `$SYMBOL`, or reply to an alert. |
 | `/paper` | Paper trading: what $5 on every alert would have made after fees, holding 24h vs selling at 2x vs 2x-or-stop-loss. |
 | `/positions` | Coins you're holding: multiple since entry, current and peak market cap. |
 | `/pause` / `/resume` | Stop or restart alerts. Screening and tracking keep running. |

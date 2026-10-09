@@ -34,7 +34,7 @@ class Tier2Config:
     min_volume_to_liquidity: float = 1.0
     give_up_below_liquidity_usd: float = 2000
     give_up_after_minutes: float = 120
-    max_drop_from_peak_pct: float = 50
+    max_drop_from_peak_pct: float = 25
     max_drop_5m_pct: float = 20
     require_any_social: bool = False
 
@@ -45,6 +45,8 @@ class Tier1Config:
     require_freeze_authority_revoked: bool = True
     min_lp_locked_pct: float = 90
     max_top10_holders_pct: float = 20
+    # RugCheck's linked "insider" wallets. Thousands means a coordinated bundle.
+    max_insider_wallets: int = 100
     max_single_holder_pct: float = 10
     max_dev_holding_pct: float = 5
     reject_creator_rug_history: bool = True

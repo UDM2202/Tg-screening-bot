@@ -31,7 +31,7 @@ tier2:
   give_up_after_minutes: 120
   # Skip coins trading this far below the highest market cap the bot has seen for
   # them. Stops alerts right after a dump, when the dump's volume makes a coin pass.
-  max_drop_from_peak_pct: 50
+  max_drop_from_peak_pct: 25
   # Don't alert while the price has fallen this much in the last 5 minutes:
   # someone is dumping right now. The coin is re-checked next minute.
   max_drop_5m_pct: 20
@@ -44,6 +44,9 @@ tier1:
   require_freeze_authority_revoked: true
   min_lp_locked_pct: 90
   max_top10_holders_pct: 20
+  # Reject coins where RugCheck links more than this many wallets as insiders.
+  # Huge counts mean supply spread over coordinated wallets that can dump together.
+  max_insider_wallets: 100
   max_single_holder_pct: 10
   max_dev_holding_pct: 5
   reject_creator_rug_history: true

@@ -125,7 +125,8 @@ def test_tier2_skips_coins_far_below_their_peak():
     m = market(mcap=100_000, liq=25_000, vol=100_000)
     cfg = Tier2Config()
     assert tier2(m, cfg, NOW()).passed
-    assert tier2(m, cfg, NOW(), peak_mcap=180_000).passed  # 44% off the peak
+    assert tier2(m, cfg, NOW(), peak_mcap=130_000).passed  # 23% off the peak
+    assert not tier2(m, cfg, NOW(), peak_mcap=150_000).passed  # 33% off, like Haaland
     r = tier2(m, cfg, NOW(), peak_mcap=1_300_000)
     assert not r.passed and not r.expired
     assert "down 92% from its peak of $1,300,000" in r.reasons
@@ -140,3 +141,13 @@ def test_tier2_waits_out_an_active_dump():
     assert "dropped 33% in the last 5 minutes" in r.reasons
     p["priceChange"]["m5"] = -10.0
     assert tier2(parse_market(GOOD, [p]), Tier2Config(), NOW()).passed
+
+
+def test_tier1_rejects_huge_insider_networks():
+    report = rug_report()
+    report["graphInsidersDetected"] = 5446
+    r = tier1(parse_report(report), None, SellSim(True, 2.0), Tier1Config())
+    assert ("insiders", "5446 insider wallets detected") in r.rejects
+    report["graphInsidersDetected"] = 33
+    r = tier1(parse_report(report), None, SellSim(True, 2.0), Tier1Config())
+    assert r.passed and "33 insider wallets detected" in r.warnings

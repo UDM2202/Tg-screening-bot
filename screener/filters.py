@@ -124,6 +124,8 @@ def tier1(
             r.reject("honeypot", f"round trip loses {sell.round_trip_loss_pct:.1f}%")
 
     r.warnings.extend(rug.warn_risks)
-    if rug.insiders_detected:
+    if rug.insiders_detected > cfg.max_insider_wallets:
+        r.reject("insiders", f"{rug.insiders_detected} insider wallets detected")
+    elif rug.insiders_detected:
         r.warnings.append(f"{rug.insiders_detected} insider wallets detected")
     return r
