@@ -106,6 +106,7 @@ async def test_full_cycle_alerts_only_the_clean_token(setup):
         assert "mint_authority" in report
         assert re.search(r"Alerts by insider wallets \[1h\]\n\s+n.*\n0-20 insiders\s+1\s+\+100%", report), report
         assert re.search(r"Alerts by market cap at alert \[1h\]\n\s+n.*\n(.*\n){1}\$100k-\$300k\s+1\s+\+100%", report), report
+        assert re.search(r"24h volume vs liquidity \[1h\]\n\s+n.*\n.*\nvol 2-5x liq\s+1\s+\+100%", report), report
         assert re.search(r"price change in the hour before \[1h\]\n\s+n.*\n.*\nup 0-100%\s+1\s+\+100%", report), report
         assert "waiting for their checkpoint: 1h: 0 · 24h: 1 · 7d: 1" in report
         rejects = s.handle_command("/rejects")
@@ -294,3 +295,16 @@ async def test_alert_warns_when_somewhat_below_peak(setup):
         await s.run_cycle()
         alert = next(m["text"] for m in apis.sent if GOOD in m["text"])
         assert "⚠️ 33% below its peak MC of $300.0k" in alert
+
+
+async def test_watch_loop_records_paper_marks_even_when_muted(setup):
+    apis, cfg, db = setup
+    async with httpx.AsyncClient(transport=httpx.MockTransport(apis)) as client:
+        s = Screener(cfg, client, db)
+        await s.run_cycle()
+        await s.handle_message("/mute", reply_to=101)
+        apis.price = 0.0005  # 2.5x the alert price
+        await s.check_watches()
+        row = db.conn.execute("SELECT paper_tp_at, paper_stop_at FROM tokens WHERE address = ?", (GOOD,)).fetchone()
+        assert row["paper_tp_at"] is not None and row["paper_stop_at"] is None
+        assert "No closed trades yet" in await s.handle_message("/paper")

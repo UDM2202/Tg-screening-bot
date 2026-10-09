@@ -132,6 +132,13 @@ def evaluate(w: Watch, market: Market | None, cfg: WatchConfig, now: float) -> l
             f"🚀 {name} hit {reached[-1]:g}x {since} (MC {usd(w.entry_mcap)} → {usd(mcap)}).{tip}"
         )
 
+    if w.bought and multiple <= 1 - cfg.stop_loss_pct / 100 and "stop" not in w.sent:
+        w.sent.add("stop")
+        messages.append(
+            f"🛑 {name} is down {(1 - multiple) * 100:.0f}% from your entry "
+            f"(MC {usd(w.entry_mcap)} → {usd(mcap)}). That's your stop-loss level."
+        )
+
     fall = 1 - price / w.peak_price
     rearmed = w.dip_peak is None or w.peak_price >= w.dip_peak * DIP_REARM_FACTOR
     if fall * 100 >= cfg.dip_from_peak_pct and rearmed:

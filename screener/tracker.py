@@ -104,10 +104,21 @@ def _pump_bucket(row) -> str | None:
     return "up 0-100%" if change < 100 else "up over 100%"
 
 
+def _volume_bucket(row) -> str | None:
+    ratio = json.loads(row["details"] or "{}").get("vol_liq")
+    if ratio is None:
+        return None  # only recorded for alerts since this breakdown was added
+    if ratio < 2:
+        return "vol <2x liq"
+    return "vol 2-5x liq" if ratio < 5 else "vol 5x+ liq"
+
+
 # Ways to split alerted coins in /stats: (title, row labels in order, labeller).
 ALERT_BREAKDOWNS = [
     ("Alerts by market cap at alert", ["under $100k", "$100k-$300k", "over $300k"], _mcap_bucket),
     ("Alerts by price change in the hour before", ["falling", "up 0-100%", "up over 100%"], _pump_bucket),
+    ("Alerts by 24h volume vs liquidity", ["vol <2x liq", "vol 2-5x liq", "vol 5x+ liq"],
+     _volume_bucket),
     ("Alerts by insider wallets", [f"0-{INSIDER_SPLIT} insiders", f"{INSIDER_SPLIT + 1}+ insiders"],
      _insider_bucket),
 ]

@@ -54,3 +54,10 @@ def test_rug_warning_for_unbought_watch_and_vanished_pool():
     msgs = evaluate(w, None, CFG, now=120)
     assert msgs and msgs[0].startswith("🚨 <b>$GOOD</b>: liquidity fell 100%")
     assert evaluate(w, None, CFG, now=180) == []
+
+
+def test_stop_loss_warning_for_bought_coin_only_once():
+    w = position()
+    msgs = evaluate(w, market(0.00009), CFG, now=60)  # -55% from entry
+    assert any(m.startswith("🛑 <b>$GOOD</b> is down 55% from your entry") for m in msgs)
+    assert not any("🛑" in m for m in evaluate(w, market(0.00008), CFG, now=120))

@@ -37,6 +37,7 @@ It also records the price of every coin it judged 1h, 24h and 7d later, for aler
 5. **Alert.** You get the key stats, the passed checks, any warnings, and one-tap buttons: DexScreener, RugCheck, Solscan, X search and the token's own links.
 6. **Tracker.** Every alerted *and* rejected coin gets its price recorded at 1h, 24h and 7d. `/stats` and the weekly summary compare the two groups and break the rejected coins down by the rule that rejected them. If coins rejected by some rule keep doing well, that rule may be too strict.
 7. **Follow-ups.** For 24 hours after each alert, the bot replies to it when the coin reaches 2x, 5x or 10x from the alert price, falls 30% from its peak, sees sells heavily outnumber buys, or loses half its liquidity (a likely rug). Reply `/mute` to an alert to silence it. Reply `/bought` after you buy, and the watch restarts from your entry price and runs for 72 hours. The warnings react to a dip that has started; they can't predict one. Thresholds are under `watch:` in `config.yaml`; set `watch_all_alerts: false` to get only rug warnings for coins you haven't bought.
+8. **Paper trading.** For 24 hours after each alert the bot notes when the price first hit 2x and when it first fell 50%. `/paper` then scores a $5 stake on every alert, minus fees, three ways: hold for 24h, sell at 2x, or sell at whichever of 2x or -50% came first. It answers the question that matters: would following the alerts have made money? Settings are under `paper:` in `config.yaml`.
 
 Every threshold lives in [`config.yaml`](config.yaml).
 
@@ -79,6 +80,7 @@ Each new pool costs about one credit for the transaction lookup. Pick which DEXe
 | `/bought` | Reply to an alert after you buy, or send `/bought <address>` or `/bought $SYMBOL`. Starts the full position watch from the current price. |
 | `/sold` | Stop watching a coin (reply, address or `$SYMBOL`). |
 | `/mute` | Reply to an alert to stop its follow-ups. |
+| `/paper` | Paper trading: what $5 on every alert would have made after fees, holding 24h vs selling at 2x vs 2x-or-stop-loss. |
 | `/positions` | Coins you're holding: multiple since entry, current and peak market cap. |
 | `/pause` / `/resume` | Stop or restart alerts. Screening and tracking keep running. |
 

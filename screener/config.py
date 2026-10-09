@@ -90,6 +90,16 @@ class WatchConfig:
     sell_price_drop_pct: float = 10
     pressure_cooldown_minutes: float = 30
     liquidity_drop_pct: float = 50
+    # Coins you /bought: warn once when price falls this far below your entry.
+    stop_loss_pct: float = 50
+
+
+@dataclass
+class PaperConfig:
+    stake_usd: float = 5
+    fee_pct: float = 5
+    take_profit_x: float = 2
+    stop_loss_pct: float = 50
 
 
 @dataclass
@@ -111,6 +121,7 @@ class Config:
     socials: SocialsConfig = field(default_factory=SocialsConfig)
     tracker: TrackerConfig = field(default_factory=TrackerConfig)
     watch: WatchConfig = field(default_factory=WatchConfig)
+    paper: PaperConfig = field(default_factory=PaperConfig)
     apis: ApiConfig = field(default_factory=ApiConfig)
     database: str = "data/screener.db"
     telegram_bot_token: str = ""
@@ -126,6 +137,7 @@ _SECTIONS = {
     "socials": SocialsConfig,
     "tracker": TrackerConfig,
     "watch": WatchConfig,
+    "paper": PaperConfig,
     "apis": ApiConfig,
 }
 

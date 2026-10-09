@@ -13,7 +13,7 @@ from html import escape
 import httpx
 
 from . import socials as socials_mod
-from . import usage
+from . import paper, usage
 from .alerts import age_text, format_alert, usd
 from .config import Config
 from .db import Database
@@ -43,6 +43,7 @@ HELP = (
     "/sold – stop watching a coin (reply, address or $SYMBOL)\n"
     "/mute – stop follow-ups for an alert (reply to it)\n"
     "/positions – coins you're holding and how they're doing\n"
+    "/paper – would $5 on every alert have made money? (after fees)\n"
     "/pause – stop sending alerts (screening and tracking continue)\n"
     "/resume – start sending alerts again"
 )
@@ -177,6 +178,7 @@ class Screener:
                 "age_minutes": market.age_minutes(datetime.now(timezone.utc)),
                 "insiders": rug.insiders_detected,
                 "change_h1": market.price_change_h1,
+                "vol_liq": market.volume_h24 / market.liquidity_usd if market.liquidity_usd else None,
             },
             **decision,
         )
@@ -282,9 +284,13 @@ class Screener:
             Watch.from_row(r)
             for r in self.db.active_watches(wc.alert_watch_hours, wc.position_watch_hours, now)
         ]
-        if not watches:
+        # Paper trading follows every recent alert, including muted ones.
+        paper_open = [r["address"] for r in self.db.paper_open(now - paper.WINDOW_HOURS * 3600)]
+        addresses = list(dict.fromkeys([w.address for w in watches] + paper_open))
+        if not addresses:
             return
-        markets = await self.dex.markets([w.address for w in watches])
+        markets = await self.dex.markets(addresses)
+        paper.record_marks(self.db, markets, self.cfg.paper, now)
         paused = self.db.get_meta("paused") == "1"
         for w in watches:
             messages = evaluate(w, markets.get(w.address), wc, now)
@@ -311,6 +317,8 @@ class Screener:
         parts = text.split(maxsplit=1)
         cmd = parts[0].split("@")[0].lower() if parts else ""
         arg = parts[1] if len(parts) > 1 else ""
+        if cmd == "/paper":
+            return paper.report(self.db, self.cfg.paper)
         if cmd not in ("/bought", "/sold", "/mute", "/positions"):
             return self.handle_command(text)
 

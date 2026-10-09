@@ -97,6 +97,17 @@ watch:
   pressure_cooldown_minutes: 30
   # Warn when liquidity falls this far below its highest level (possible rug).
   liquidity_drop_pct: 50
+  # Coins you /bought: warn once when price falls this far below your entry.
+  stop_loss_pct: 50
+
+# /paper simulates this stake on every alert and compares exit strategies.
+# Changing the levels only affects alerts sent after the change.
+paper:
+  stake_usd: 5
+  # Network, priority and token-account fees for a buy plus a sell, as % of the stake.
+  fee_pct: 5
+  take_profit_x: 2
+  stop_loss_pct: 50
 
 apis:
   dexscreener: https://api.dexscreener.com

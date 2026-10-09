@@ -23,7 +23,10 @@ CREATE TABLE IF NOT EXISTS tokens (
     ref_liquidity REAL,
     reject_codes TEXT,  -- JSON list of tier 1 rule codes
     details      TEXT,  -- JSON blob of facts shown in the alert
-    peak_mcap    REAL   -- highest market cap seen while watching
+    peak_mcap    REAL,  -- highest market cap seen while watching
+    paper_tp_at  REAL,  -- paper trading: first time price reached the take-profit level
+    paper_stop_at REAL, -- paper trading: first time price fell to the stop-loss level
+    paper_stop_return REAL  -- return actually seen when the stop-loss was hit
 );
 CREATE INDEX IF NOT EXISTS tokens_status ON tokens(status, first_seen);
 
@@ -82,9 +85,10 @@ class Database:
     def _add_missing_columns(self) -> None:
         """Upgrade databases created by older versions of the bot."""
         columns = {r["name"] for r in self.conn.execute("PRAGMA table_info(tokens)")}
-        if "peak_mcap" not in columns:
-            self.conn.execute("ALTER TABLE tokens ADD COLUMN peak_mcap REAL")
-            self.conn.commit()
+        for column in ("peak_mcap", "paper_tp_at", "paper_stop_at", "paper_stop_return"):
+            if column not in columns:
+                self.conn.execute(f"ALTER TABLE tokens ADD COLUMN {column} REAL")
+        self.conn.commit()
 
     # --- watchlist -------------------------------------------------------
 
@@ -363,6 +367,38 @@ class Database:
             (symbol,),
         ).fetchone()
         return row["address"] if row else None
+
+    # --- paper trading ---------------------------------------------------
+
+    def paper_open(self, since: float) -> list[sqlite3.Row]:
+        """Alerts still inside their paper-trading window."""
+        return list(self.conn.execute(
+            "SELECT address, ref_price, paper_tp_at, paper_stop_at FROM tokens"
+            " WHERE status = 'alerted' AND decided_at >= ?",
+            (since,),
+        ))
+
+    def set_paper_mark(
+        self, address: str, *, tp_at: float | None = None, stop_at: float | None = None,
+        stop_return: float | None = None,
+    ) -> None:
+        if tp_at is not None:
+            self.conn.execute("UPDATE tokens SET paper_tp_at = ? WHERE address = ?", (tp_at, address))
+        if stop_at is not None:
+            self.conn.execute(
+                "UPDATE tokens SET paper_stop_at = ?, paper_stop_return = ? WHERE address = ?",
+                (stop_at, stop_return, address),
+            )
+        self.conn.commit()
+
+    def paper_closed(self, checkpoint: str) -> list[sqlite3.Row]:
+        """Alerts with a recorded price at the given checkpoint, with their paper marks."""
+        return list(self.conn.execute(
+            "SELECT t.address, t.ref_price, t.paper_tp_at, t.paper_stop_at, t.paper_stop_return,"
+            " s.price, s.liquidity FROM tokens t JOIN snapshots s ON s.address = t.address"
+            " WHERE t.status = 'alerted' AND s.checkpoint = ? AND s.missed = 0",
+            (checkpoint,),
+        ))
 
     # --- meta ------------------------------------------------------------
 
