@@ -322,3 +322,23 @@ async def test_why_explains_each_state(setup):
         assert "🟢 Alerted" in await s.handle_message("/why", reply_to=101)
         assert "haven't seen" in await s.handle_message("/why 11111111111111111111111111111111")
         assert (await s.handle_message("/why")).startswith("Which coin?")
+
+
+async def test_stats_new_counts_only_coins_judged_under_current_rules(setup):
+    apis, cfg, db = setup
+    async with httpx.AsyncClient(transport=httpx.MockTransport(apis)) as client:
+        s = Screener(cfg, client, db)
+        assert "hasn't recorded a rules change" in s.handle_command("/stats new")
+        await s.run_cycle()  # old rules: GOOD alerted, RUG rejected
+        db.conn.execute("UPDATE tokens SET decided_at = decided_at - 3700")
+        await take_snapshots(db, s.dex, cfg.tracker)
+        assert s.note_rules_change() is True
+        assert s.note_rules_change() is False  # same rules, no new marker
+
+        new = s.handle_command("/stats new")
+        assert "Since rules changed" in new
+        assert re.search(r"pass\s+0", new) and re.search(r"fail\s+0", new)
+        assert re.search(r"pass\s+1", s.handle_command("/stats"))
+
+        cfg.tier1.max_insider_wallets = 50  # editing a rule restarts the count
+        assert s.note_rules_change() is True

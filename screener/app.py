@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 import re
 import time
+from dataclasses import asdict
 from datetime import datetime, timezone
 from html import escape
 
@@ -36,6 +38,7 @@ SOLANA_ADDRESS = re.compile(r"^[1-9A-HJ-NP-Za-km-z]{32,44}$")
 HELP = (
     "/status – watchlist and decision counts\n"
     "/stats – how alerts performed vs rejected coins (all time)\n"
+    "/stats new – same, only coins judged under the current filter rules\n"
     "/week – same, last 7 days\n"
     "/recent – last 10 alerts\n"
     "/rejects – which rug checks reject coins most, with examples\n"
@@ -244,6 +247,12 @@ class Screener:
                 + usage.report()
             )
         if cmd == "/stats":
+            if text.split()[1:2] == ["new"]:
+                since = self.db.get_meta("rules_changed_at")
+                if not since:
+                    return "The bot hasn't recorded a rules change yet. Restart it once and try again."
+                when = datetime.fromtimestamp(float(since), timezone.utc)
+                return self.report(float(since), f"Since rules changed ({when:%b %d, %H:%M} UTC)")
             return self.report()
         if cmd == "/week":
             return self.report(time.time() - WEEK, "Last 7 days")
@@ -479,7 +488,19 @@ class Screener:
                 log.exception("%s failed", name)
             await asyncio.sleep(seconds)
 
+    def note_rules_change(self) -> bool:
+        """Record when the filter rules last changed, so /stats new can compare fairly."""
+        rules = json.dumps({"tier2": asdict(self.cfg.tier2), "tier1": asdict(self.cfg.tier1)}, sort_keys=True)
+        digest = hashlib.sha256(rules.encode()).hexdigest()
+        if self.db.get_meta("rules_hash") == digest:
+            return False
+        self.db.set_meta("rules_hash", digest)
+        self.db.set_meta("rules_changed_at", str(time.time()))
+        return True
+
     async def run(self) -> None:
+        if self.note_rules_change():
+            log.info("Filter rules changed: /stats new counts from now")
         requeued = self.db.undo_token2022_rejections()
         if requeued:
             log.info("Re-checking %d coins wrongly rejected as Token-2022 traps", requeued)

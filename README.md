@@ -75,6 +75,7 @@ Each new pool costs about one credit for the transaction lookup. Pick which DEXe
 |---|---|
 | `/status` | Watchlist size and decision counts |
 | `/stats` | Alerted vs rejected performance, all time |
+| `/stats new` | Same, but only coins judged since the filter rules last changed. The bot notices rule changes on startup, so this always measures the current rules. |
 | `/week` | Same, last 7 days |
 | `/recent` | Last 10 alerts |
 | `/bought` | Reply to an alert after you buy, or send `/bought <address>` or `/bought $SYMBOL`. Starts the full position watch from the current price. |
