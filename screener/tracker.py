@@ -129,6 +129,8 @@ HEADER = ROW.format("", "n", "median", "up", "2x", "-50%")
 
 
 def _row(label: str, returns: list[float]) -> str:
+    """One table row. Labels are escaped because the report is sent as Telegram HTML."""
+    label = escape(label)
     if not returns:
         return ROW.format(label, 0, "–", "", "", "")
     n = len(returns)

@@ -53,8 +53,19 @@ class Telegram:
             result = await self._call("sendMessage", payload)
             return result.get("message_id")
         except Exception as exc:
-            log.error("Failed to send Telegram message: %s", exc)
-            return None
+            if "parse entities" not in str(exc):
+                log.error("Failed to send Telegram message: %s", exc)
+                return None
+            # Broken HTML formatting: still deliver the content, as plain text.
+            log.error("Bad message formatting, resending as plain text: %s", exc)
+            payload.pop("parse_mode")
+            payload["text"] = html.unescape(re.sub(r"<[^>]+>", "", text))
+            try:
+                result = await self._call("sendMessage", payload)
+                return result.get("message_id")
+            except Exception as retry_exc:
+                log.error("Failed to send Telegram message: %s", retry_exc)
+                return None
 
     async def member_count(self, username: str) -> int | None:
         """Member count of a public group or channel, or None if it can't be read."""
