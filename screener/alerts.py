@@ -82,7 +82,11 @@ def format_alert(
 
     lines += ["", "<i>Shortlist, not a buy signal. 30-second manual check first: chart, holders, X.</i>"]
 
-    links: list[Button] = [("DexScreener", m.url), ("RugCheck", f"https://rugcheck.xyz/tokens/{m.address}")]
+    links: list[Button] = [
+        ("GMGN", f"https://gmgn.ai/sol/token/{m.address}"),
+        ("DexScreener", m.url),
+        ("RugCheck", f"https://rugcheck.xyz/tokens/{m.address}"),
+    ]
     links2: list[Button] = [
         ("Solscan", f"https://solscan.io/token/{m.address}"),
         ("Search X", f"https://x.com/search?q={m.address}&f=live"),
@@ -139,6 +143,7 @@ def format_near_bond_alert(
 
     buttons = [
         [("pump.fun", f"https://pump.fun/coin/{coin.mint}"),
+         ("GMGN", f"https://gmgn.ai/sol/token/{coin.mint}"),
          ("DexScreener", f"https://dexscreener.com/solana/{coin.mint}")],
         [("RugCheck", f"https://rugcheck.xyz/tokens/{coin.mint}"),
          ("Solscan", f"https://solscan.io/token/{coin.mint}")],

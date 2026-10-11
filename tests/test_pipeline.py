@@ -99,7 +99,7 @@ async def test_full_cycle_alerts_only_the_clean_token(setup):
         assert "TG (1,234)" in alert["text"]
         assert "round trip -5.0%" in alert["text"]
         labels = [b["text"] for row in alert["reply_markup"]["inline_keyboard"] for b in row]
-        assert {"DexScreener", "RugCheck", "Solscan"} <= set(labels)
+        assert {"GMGN", "DexScreener", "RugCheck", "Solscan"} <= set(labels)
 
         # A second cycle must not alert the same token again.
         await s.run_cycle()
@@ -363,7 +363,7 @@ async def test_near_bond_scan_alerts_once_and_tracks_type(setup, monkeypatch):
         assert text.startswith("⚡ <b>NEAR BOND</b> · 90% bonded")
         assert "MC $65.0k" in text and "can't be pulled" in text and "unable to sell" in text
         labels = [b["text"] for row in alerts[0]["reply_markup"]["inline_keyboard"] for b in row]
-        assert "pump.fun" in labels
+        assert {"pump.fun", "GMGN"} <= set(labels)
         assert db.get_token(CURVE)["kind"] == "near_bond" and db.status(CURVE) == "alerted"
         assert db.status("Stalled111111111111111111111111111111111pump") is None  # only 50% bonded
 
