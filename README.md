@@ -19,7 +19,7 @@ It also records the price of every coin it judged 1h, 24h and 7d later, for aler
 1. **Discovery.** Every 60s it pulls DexScreener's latest token profiles and boosts. It also streams pump.fun tokens that graduate to an AMM pool, from PumpPortal's free websocket. Optionally (off by default), it also uses Helius to watch new pools on Raydium (AMM v4 and CPMM), PumpSwap and Meteora DLMM as they're created. New tokens go on a watchlist.
 2. **Tier 2 market filter (cheap).** Uses DexScreener data only. Tokens that fail are re-checked every cycle until they pass or age out, since a 10-minute-old coin can look very different an hour later. Coins still under $2k liquidity after 2 hours are dropped early.
    - Liquidity ≥ $8k
-   - Market cap $30k to $1.5M
+   - Market cap $30k to $300k
    - Liquidity ≥ 5% of market cap
    - Age 15 min to 24 h
    - 24h volume ≥ 1× liquidity

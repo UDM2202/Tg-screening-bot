@@ -27,7 +27,7 @@ class DiscoveryConfig:
 class Tier2Config:
     min_liquidity_usd: float = 8000
     min_market_cap_usd: float = 30000
-    max_market_cap_usd: float = 1_500_000
+    max_market_cap_usd: float = 300_000
     min_liquidity_to_mcap_pct: float = 5
     min_age_minutes: float = 15
     max_age_hours: float = 24

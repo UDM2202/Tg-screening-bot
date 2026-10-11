@@ -151,3 +151,10 @@ def test_tier1_rejects_huge_insider_networks():
     report["graphInsidersDetected"] = 33
     r = tier1(parse_report(report), None, SellSim(True, 2.0), Tier1Config())
     assert r.passed and "33 insider wallets detected" in r.warnings
+
+
+def test_tier2_skips_coins_above_300k_market_cap():
+    cfg = Tier2Config()
+    assert tier2(market(mcap=250_000, liq=40_000, vol=60_000), cfg, NOW()).passed
+    r = tier2(market(mcap=600_000, liq=66_000, vol=81_000), cfg, NOW())  # Haaland at alert time
+    assert not r.passed and "market cap $600,000 outside range" in r.reasons

@@ -20,7 +20,8 @@ discovery:
 tier2:
   min_liquidity_usd: 8000
   min_market_cap_usd: 30000
-  max_market_cap_usd: 1500000
+  # Skip coins already above this market cap: the bigger it is, the harder a 2x.
+  max_market_cap_usd: 300000
   min_liquidity_to_mcap_pct: 5
   min_age_minutes: 15
   max_age_hours: 24
