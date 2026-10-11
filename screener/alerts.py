@@ -96,3 +96,51 @@ def format_alert(
     if social_row:
         buttons.append(social_row)
     return "\n".join(lines), buttons
+
+
+def format_near_bond_alert(
+    coin,
+    rug: RugFacts,
+    goplus: GoPlusFacts | None,
+    socials: SocialsReport,
+    result: Tier1Result,
+    now: datetime,
+) -> tuple[str, list[list[Button]]]:
+    """Alert for a pump.fun coin still on the bonding curve."""
+    lines = [
+        f"⚡ <b>NEAR BOND</b> · {coin.progress_pct:.0f}% bonded",
+        f"<b>${escape(coin.symbol)}</b> · {escape(coin.name)}",
+        f"<code>{coin.mint}</code>",
+        "",
+        f"MC {usd(coin.market_cap_usd)} · Age {age_text(coin.age_minutes(now))}",
+        "Still on the pump.fun curve: liquidity is held by pump.fun and can't be pulled",
+        "",
+        "✅ Mint revoked · ✅ Freeze revoked",
+        f"Top 10: {pct(rug.top10_pct)} · Max wallet: {pct(rug.max_holder_pct)} · Dev: {pct(rug.dev_pct)}",
+    ]
+    if goplus is None:
+        lines.append("GoPlus: not checked")
+
+    social_bits = []
+    if socials.website:
+        social_bits.append("🌐 site")
+    if socials.twitter:
+        social_bits.append("𝕏")
+    if socials.telegram:
+        members = f" ({socials.telegram_members:,})" if socials.telegram_members is not None else ""
+        social_bits.append(f"💬 TG{members}")
+    lines += ["", f"Socials {socials.score}/{socials.max_score}: " + (" · ".join(social_bits) or "none")]
+
+    warnings = result.warnings + socials.warnings
+    lines.append("")
+    lines += [f"⚠️ {escape(w)}" for w in warnings]
+    lines.append("⚠️ Trading pauses while it migrates: you may be unable to sell for a few minutes")
+    lines += ["", "<i>High risk: many coins stall before bonding or dump right after. Small size only.</i>"]
+
+    buttons = [
+        [("pump.fun", f"https://pump.fun/coin/{coin.mint}"),
+         ("DexScreener", f"https://dexscreener.com/solana/{coin.mint}")],
+        [("RugCheck", f"https://rugcheck.xyz/tokens/{coin.mint}"),
+         ("Solscan", f"https://solscan.io/token/{coin.mint}")],
+    ]
+    return "\n".join(lines), buttons

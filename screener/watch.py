@@ -102,6 +102,8 @@ def evaluate(w: Watch, market: Market | None, cfg: WatchConfig, now: float) -> l
     messages: list[str] = []
 
     liquidity = market.liquidity_usd if market else 0.0
+    if market is not None and market.on_curve:
+        liquidity = w.max_liquidity  # curve liquidity can't be pulled; skip the rug check
     if liquidity > w.max_liquidity:
         w.max_liquidity = liquidity
     drop = 1 - liquidity / w.max_liquidity if w.max_liquidity else 0.0

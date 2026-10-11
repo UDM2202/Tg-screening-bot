@@ -65,11 +65,12 @@ def _lp_locked_pct(markets: list[dict[str, Any]]) -> float | None:
     return weighted / total if total > 0 else min(pcts)
 
 
-def parse_report(report: dict[str, Any]) -> RugFacts:
+def parse_report(report: dict[str, Any], extra_pool_accounts: set[str] | None = None) -> RugFacts:
+    """extra_pool_accounts: other accounts holding supply for a pool, e.g. a pump.fun bonding curve."""
     token = report.get("token") or {}
     markets = report.get("markets") or []
     creator = report.get("creator")
-    pools = _pool_accounts(markets)
+    pools = _pool_accounts(markets) | (extra_pool_accounts or set())
 
     holders = [
         h for h in report.get("topHolders") or []
@@ -114,5 +115,6 @@ class RugCheck:
         self.client = client
         self.base = base_url.rstrip("/")
 
-    async def report(self, mint: str) -> RugFacts:
-        return parse_report(await get_json(self.client, f"{self.base}/v1/tokens/{mint}/report"))
+    async def report(self, mint: str, extra_pool_accounts: set[str] | None = None) -> RugFacts:
+        report = await get_json(self.client, f"{self.base}/v1/tokens/{mint}/report")
+        return parse_report(report, extra_pool_accounts)

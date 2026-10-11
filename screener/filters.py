@@ -60,6 +60,21 @@ def tier2(market: Market, cfg: Tier2Config, now: datetime, peak_mcap: float | No
     return Tier2Result(not reasons, False, reasons)
 
 
+def near_bond_reasons(coin, cfg, now: datetime, peak_mcap: float | None) -> list[str]:
+    """Market filter for pump.fun coins still on the bonding curve. Empty list = passes."""
+    reasons = []
+    if not cfg.min_progress_pct <= coin.progress_pct <= cfg.max_progress_pct:
+        reasons.append(f"{coin.progress_pct:.0f}% bonded, outside {cfg.min_progress_pct:g}-{cfg.max_progress_pct:g}%")
+    if not cfg.min_market_cap_usd <= coin.market_cap_usd <= cfg.max_market_cap_usd:
+        reasons.append(f"market cap ${coin.market_cap_usd:,.0f} outside range")
+    age = coin.age_minutes(now)
+    if age is None or age < cfg.min_age_minutes:
+        reasons.append(f"younger than {cfg.min_age_minutes:g}m")
+    if peak_mcap and coin.market_cap_usd < peak_mcap * (1 - cfg.max_drop_from_peak_pct / 100):
+        reasons.append(f"down {(1 - coin.market_cap_usd / peak_mcap) * 100:.0f}% from its peak of ${peak_mcap:,.0f}")
+    return reasons
+
+
 @dataclass
 class Tier1Result:
     rejects: list[tuple[str, str]] = field(default_factory=list)  # (code, message)
@@ -78,8 +93,13 @@ def tier1(
     goplus: GoPlusFacts | None,
     sell: SellSim | None,
     cfg: Tier1Config,
+    on_curve: bool = False,
 ) -> Tier1Result:
-    """Hard rug rejects. Every failed rule is recorded so the tracker can grade each one."""
+    """Hard rug rejects. Every failed rule is recorded so the tracker can grade each one.
+
+    on_curve: the coin still trades on pump.fun's bonding curve. Its liquidity is held by
+    the pump.fun program, so there is no LP to lock and the dev can't pull it.
+    """
     r = Tier1Result()
 
     if rug.rugged:
@@ -92,7 +112,9 @@ def tier1(
     if cfg.require_freeze_authority_revoked and freezable:
         r.reject("freeze_authority", "freeze authority not revoked")
 
-    if rug.lp_locked_pct is None:
+    if on_curve:
+        pass
+    elif rug.lp_locked_pct is None:
         r.reject("lp_unlocked", "LP lock status unknown")
     elif rug.lp_locked_pct < cfg.min_lp_locked_pct:
         r.reject("lp_unlocked", f"only {rug.lp_locked_pct:.0f}% of LP locked/burned")
@@ -111,6 +133,8 @@ def tier1(
     if cfg.reject_rugcheck_danger_risks:
         ignored = {name.lower() for name in cfg.ignore_danger_risks}
         danger = [d for d in rug.danger_risks if d.lower() not in ignored]
+        if on_curve:  # LP and liquidity warnings don't apply before the pool exists
+            danger = [d for d in danger if "lp" not in d.lower().split() and "liquidity" not in d.lower()]
         if danger:
             r.reject("rugcheck_danger", "RugCheck danger: " + ", ".join(danger))
 

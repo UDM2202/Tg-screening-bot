@@ -16,15 +16,16 @@ import httpx
 
 from . import socials as socials_mod
 from . import paper, usage
-from .alerts import age_text, format_alert, usd
+from .alerts import age_text, format_alert, format_near_bond_alert, usd
 from .config import Config
 from .db import Database
-from .filters import tier1, tier2
+from .filters import near_bond_reasons, tier1, tier2
 from .http import ApiError
 from .sources.dexscreener import DexScreener, Market
 from .sources.goplus import GoPlus
 from .sources.helius import HeliusPools
 from .sources.jupiter import Jupiter
+from .sources.pumpfun import CurveCoin, PumpFun
 from .sources.pumpportal import stream_migrations
 from .sources.rugcheck import RugCheck
 from .telegram import Telegram
@@ -66,6 +67,9 @@ class Screener:
         # Profile links (socials) seen at discovery, keyed by token address.
         self.profile_links: dict[str, list[dict]] = {}
         self.rug_check_slots = asyncio.Semaphore(3)
+        self.pumpfun = PumpFun(client, cfg.near_bond.api)
+        # Highest market cap seen per bonding-curve coin, for the drop-from-peak rule.
+        self.curve_peaks: dict[str, float] = {}
 
     # --- discovery -------------------------------------------------------
 
@@ -204,6 +208,100 @@ class Screener:
             )
             self.db.save_watch(watch.to_values())
 
+    # --- near-bond alerts (pump.fun coins still on the curve) -------------
+
+    def near_bond_status(self) -> str:
+        if not self.cfg.near_bond.enabled:
+            return "⚡ Near-bond alerts: off"
+        error = self.db.get_meta("near_bond_error")
+        last_ok = self.db.get_meta("near_bond_last_ok")
+        if error:
+            return f"⚡ Near-bond scan failing: {escape(error)}"
+        if not last_ok:
+            return "⚡ Near-bond scan: waiting for first check"
+        return f"⚡ Near-bond scan OK, last {age_text((time.time() - float(last_ok)) / 60)} ago"
+
+    async def scan_near_bond(self) -> None:
+        nb = self.cfg.near_bond
+        try:
+            coins = await self.pumpfun.top_unbonded(nb.fetch_limit)
+        except ApiError as exc:
+            self.db.set_meta("near_bond_error", str(exc)[:200])
+            log.warning("Near-bond scan failed: %s", exc)
+            return
+        self.db.set_meta("near_bond_error", "")
+        self.db.set_meta("near_bond_last_ok", str(time.time()))
+        if len(self.curve_peaks) > 5000:
+            self.curve_peaks.clear()
+        now = datetime.now(timezone.utc)
+        for coin in coins:
+            peak = max(self.curve_peaks.get(coin.mint, 0.0), coin.market_cap_usd)
+            self.curve_peaks[coin.mint] = peak
+            if self.db.status(coin.mint) not in (None, "watching"):
+                continue  # already alerted or judged, here or after graduating
+            if near_bond_reasons(coin, nb, now, peak):
+                continue
+            async with self.rug_check_slots:
+                try:
+                    await self._check_curve_coin(coin)
+                except ApiError as exc:
+                    log.warning("Rug checks unavailable for %s, retrying next scan: %s", coin.symbol, exc)
+                except Exception:
+                    log.exception("Unexpected error checking curve coin %s", coin.mint)
+
+    async def _check_curve_coin(self, coin: CurveCoin) -> None:
+        t1 = self.cfg.tier1
+        rug = await self.rugcheck.report(coin.mint, extra_pool_accounts=coin.curve_accounts)
+        goplus = None
+        if t1.use_goplus:
+            try:
+                goplus = await self.goplus.security(coin.mint)
+            except ApiError as exc:
+                log.info("GoPlus unavailable for %s: %s", coin.symbol, exc)
+        # No sell simulation: the pump.fun curve always lets holders sell.
+        result = tier1(rug, goplus, None, t1, on_curve=True)
+        self.db.add_token(coin.mint, "pumpfun-curve")
+        self.db.touch(coin.mint, coin.symbol, coin.name, coin.market_cap_usd)
+        decision = dict(price=coin.price_usd, mcap=coin.market_cap_usd, liquidity=None, kind="near_bond")
+        if not result.passed:
+            log.info("Rejected near-bond %s: %s", coin.symbol, "; ".join(m for _, m in result.rejects))
+            self.db.decide(
+                coin.mint, "rejected",
+                reject_codes=sorted({code for code, _ in result.rejects}),
+                details={"reasons": [m for _, m in result.rejects], "progress": coin.progress_pct},
+                **decision,
+            )
+            return
+
+        market = coin.as_market()
+        socials = await socials_mod.assess(market, None, self.db, self.tg, self.cfg.socials)
+        text, buttons = format_near_bond_alert(coin, rug, goplus, socials, result, datetime.now(timezone.utc))
+        self.db.decide(
+            coin.mint, "alerted",
+            details={
+                "warnings": result.warnings + socials.warnings,
+                "socials": socials.score,
+                "age_minutes": coin.age_minutes(datetime.now(timezone.utc)),
+                "insiders": rug.insiders_detected,
+                "progress": coin.progress_pct,
+            },
+            **decision,
+        )
+        if self.db.get_meta("paused") == "1":
+            log.info("Paused, not sending near-bond alert for %s", coin.symbol)
+            return
+        log.info("NEAR-BOND ALERT %s (%s) at %.0f%%", coin.symbol, coin.mint, coin.progress_pct)
+        message_id = await self.tg.send(text, buttons)
+        watch = Watch(
+            address=coin.mint,
+            symbol=coin.symbol,
+            started_at=time.time(),
+            entry_price=coin.price_usd,
+            entry_mcap=coin.market_cap_usd,
+            alert_message_id=message_id,
+        )
+        self.db.save_watch(watch.to_values())
+
     # --- tracker and reports --------------------------------------------
 
     def report(self, since: float = 0, title: str = "Tracker (all time)") -> str:
@@ -243,6 +341,8 @@ class Screener:
                 f"Rejected by rug checks: {counts.get('rejected', 0)}\n"
                 f"Aged out: {counts.get('expired', 0)}\n\n"
                 + self.speed_report()
+                + "\n\n"
+                + self.near_bond_status()
                 + "\n\n"
                 + usage.report()
             )
@@ -512,6 +612,10 @@ class Screener:
             self._every(self.cfg.discovery.poll_interval_seconds, self.run_cycle, "Screening cycle"),
             self._every(self.cfg.tracker.interval_seconds, self.track, "Tracker"),
             self._every(self.cfg.watch.interval_seconds, self.check_watches, "Position watch"),
+            *(
+                [self._every(self.cfg.near_bond.poll_seconds, self.scan_near_bond, "Near-bond scan")]
+                if self.cfg.near_bond.enabled else []
+            ),
             self.command_loop(),
         ]
         if self.cfg.discovery.pumpportal_migrations:

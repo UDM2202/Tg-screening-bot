@@ -13,7 +13,7 @@ from screener.config import Config
 from screener.db import Database
 from screener.tracker import take_snapshots
 
-from .fixtures import GOOD, RUG, YOUNG, goplus_result, pair, rug_report
+from .fixtures import CURVE, GOOD, RUG, YOUNG, curve_rug_report, goplus_result, pair, pumpfun_coin, rug_report
 
 
 class FakeApis:
@@ -21,6 +21,8 @@ class FakeApis:
         self.price = 0.0002
         self.liq = 20_000
         self.txns_m5 = (5, 5, 0.0)  # buys, sells, price change %
+        self.pumpfun_coins = [pumpfun_coin(), pumpfun_coin("Stalled111111111111111111111111111111111pump", progress=50)]
+        self.pumpfun_down = False
         self.sent: list[dict] = []
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
@@ -46,8 +48,14 @@ class FakeApis:
                 elif a == YOUNG:
                     pairs.append(pair(YOUNG, symbol="YNG", age_min=3))
             return httpx.Response(200, json=pairs)
+        if "pump.fun" in url and "/coins" in url:
+            if self.pumpfun_down:
+                return httpx.Response(503)
+            return httpx.Response(200, json=self.pumpfun_coins)
         if "rugcheck" in url:
             mint = re.search(r"/tokens/([^/]+)/report", url).group(1)
+            if mint == CURVE:
+                return httpx.Response(200, json=curve_rug_report())
             return httpx.Response(200, json=rug_report(mint_auth="dev" if mint == RUG else None))
         if "gopluslabs" in url:
             return httpx.Response(200, json=goplus_result(request.url.params["contract_addresses"]))
@@ -342,3 +350,42 @@ async def test_stats_new_counts_only_coins_judged_under_current_rules(setup):
 
         cfg.tier1.max_insider_wallets = 50  # editing a rule restarts the count
         assert s.note_rules_change() is True
+
+
+async def test_near_bond_scan_alerts_once_and_tracks_type(setup, monkeypatch):
+    apis, cfg, db = setup
+    async with httpx.AsyncClient(transport=httpx.MockTransport(apis)) as client:
+        s = Screener(cfg, client, db)
+        await s.scan_near_bond()
+        alerts = [m for m in apis.sent if CURVE in m["text"]]
+        assert len(alerts) == 1
+        text = alerts[0]["text"]
+        assert text.startswith("⚡ <b>NEAR BOND</b> · 90% bonded")
+        assert "MC $65.0k" in text and "can't be pulled" in text and "unable to sell" in text
+        labels = [b["text"] for row in alerts[0]["reply_markup"]["inline_keyboard"] for b in row]
+        assert "pump.fun" in labels
+        assert db.get_token(CURVE)["kind"] == "near_bond" and db.status(CURVE) == "alerted"
+        assert db.status("Stalled111111111111111111111111111111111pump") is None  # only 50% bonded
+
+        await s.scan_near_bond()
+        assert len([m for m in apis.sent if CURVE in m["text"]]) == 1  # no repeat alert
+
+        assert "⚡ Near-bond scan OK" in s.handle_command("/status")
+        apis.pumpfun_down = True
+        real_sleep = asyncio.sleep
+        monkeypatch.setattr("screener.http.asyncio.sleep", lambda *_: real_sleep(0))
+        await s.scan_near_bond()
+        assert "⚡ Near-bond scan failing" in s.handle_command("/status")
+
+
+async def test_near_bond_coin_missing_from_dexscreener_is_not_counted_dead(setup):
+    apis, cfg, db = setup
+    async with httpx.AsyncClient(transport=httpx.MockTransport(apis)) as client:
+        s = Screener(cfg, client, db)
+        await s.scan_near_bond()
+        db.conn.execute("UPDATE tokens SET decided_at = decided_at - 3700 WHERE address = ?", (CURVE,))
+        await take_snapshots(db, s.dex, cfg.tracker)  # DexScreener (FakeApis) doesn't list CURVE
+        assert db.conn.execute("SELECT COUNT(*) FROM snapshots WHERE address = ?", (CURVE,)).fetchone()[0] == 0
+        await s.check_watches()
+        row = db.get_token(CURVE)
+        assert row["paper_stop_at"] is None  # not mistaken for a dead coin

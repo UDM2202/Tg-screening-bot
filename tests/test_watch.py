@@ -61,3 +61,10 @@ def test_stop_loss_warning_for_bought_coin_only_once():
     msgs = evaluate(w, market(0.00009), CFG, now=60)  # -55% from entry
     assert any(m.startswith("🛑 <b>$GOOD</b> is down 55% from your entry") for m in msgs)
     assert not any("🛑" in m for m in evaluate(w, market(0.00008), CFG, now=120))
+
+
+def test_coin_on_the_curve_never_triggers_a_rug_warning():
+    w = Watch(address=GOOD, symbol="GOOD", started_at=0, max_liquidity=20_000)
+    m = market(0.0002, liq=0)
+    m.dex_id = "pumpfun"  # DexScreener shows no pool liquidity while on the bonding curve
+    assert evaluate(w, m, CFG, now=60) == []

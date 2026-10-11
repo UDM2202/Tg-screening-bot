@@ -113,6 +113,23 @@ paper:
   take_profit_x: 2
   stop_loss_pct: 50
 
+# ⚡ Near-bond alerts: pump.fun coins still on the bonding curve but close to
+# graduating. Higher risk: most never bond, and trading pauses during migration.
+near_bond:
+  enabled: true
+  # pump.fun's public web API (unofficial; may change without notice).
+  api: https://frontend-api-v3.pump.fun
+  poll_seconds: 60
+  fetch_limit: 50
+  # Alert when this much of the curve is sold (100 = bonded).
+  min_progress_pct: 85
+  max_progress_pct: 99
+  min_age_minutes: 10
+  min_market_cap_usd: 30000
+  max_market_cap_usd: 300000
+  # Skip coins this far below the highest market cap the bot has seen for them.
+  max_drop_from_peak_pct: 25
+
 apis:
   dexscreener: https://api.dexscreener.com
   rugcheck: https://api.rugcheck.xyz

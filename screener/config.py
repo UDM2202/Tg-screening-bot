@@ -97,6 +97,21 @@ class WatchConfig:
 
 
 @dataclass
+class NearBondConfig:
+    enabled: bool = True
+    api: str = "https://frontend-api-v3.pump.fun"
+    poll_seconds: int = 60
+    # How many of pump.fun's largest not-yet-bonded coins to fetch each poll.
+    fetch_limit: int = 50
+    min_progress_pct: float = 85
+    max_progress_pct: float = 99
+    min_age_minutes: float = 10
+    min_market_cap_usd: float = 30_000
+    max_market_cap_usd: float = 300_000
+    max_drop_from_peak_pct: float = 25
+
+
+@dataclass
 class PaperConfig:
     stake_usd: float = 5
     fee_pct: float = 5
@@ -124,6 +139,7 @@ class Config:
     tracker: TrackerConfig = field(default_factory=TrackerConfig)
     watch: WatchConfig = field(default_factory=WatchConfig)
     paper: PaperConfig = field(default_factory=PaperConfig)
+    near_bond: NearBondConfig = field(default_factory=NearBondConfig)
     apis: ApiConfig = field(default_factory=ApiConfig)
     database: str = "data/screener.db"
     telegram_bot_token: str = ""
@@ -140,6 +156,7 @@ _SECTIONS = {
     "tracker": TrackerConfig,
     "watch": WatchConfig,
     "paper": PaperConfig,
+    "near_bond": NearBondConfig,
     "apis": ApiConfig,
 }
 

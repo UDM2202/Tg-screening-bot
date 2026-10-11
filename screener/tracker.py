@@ -43,10 +43,14 @@ async def take_snapshots(db: Database, dex: DexScreener, cfg: TrackerConfig, now
     markets = await dex.markets(sorted({addr for addr, _ in on_time}))
     for addr, checkpoint in on_time:
         m = markets.get(addr)
+        if m is None and (db.get_token(addr) or {"kind": None})["kind"] == "near_bond":
+            continue  # a curve coin DexScreener hasn't listed: retry later rather than call it dead
         if m is None:
             db.add_snapshot(addr, checkpoint, None, 0.0, None, now)
         else:
-            db.add_snapshot(addr, checkpoint, m.price_usd, m.liquidity_usd, m.market_cap_usd, now)
+            # A bonding-curve price is real even though DexScreener shows no pool liquidity.
+            liquidity = None if m.on_curve else m.liquidity_usd
+            db.add_snapshot(addr, checkpoint, m.price_usd, liquidity, m.market_cap_usd, now)
     log.info("Recorded %d price checkpoints", len(on_time))
     return len(on_time)
 
@@ -113,8 +117,13 @@ def _volume_bucket(row) -> str | None:
     return "vol 2-5x liq" if ratio < 5 else "vol 5x+ liq"
 
 
+def _kind_bucket(row) -> str:
+    return "near bond" if row["kind"] == "near_bond" else "graduated"
+
+
 # Ways to split alerted coins in /stats: (title, row labels in order, labeller).
 ALERT_BREAKDOWNS = [
+    ("Alerts by type", ["graduated", "near bond"], _kind_bucket),
     ("Alerts by market cap at alert", ["under $100k", "$100k-$300k", "over $300k"], _mcap_bucket),
     ("Alerts by price change in the hour before", ["falling", "up 0-100%", "up over 100%"], _pump_bucket),
     ("Alerts by 24h volume vs liquidity", ["vol <2x liq", "vol 2-5x liq", "vol 5x+ liq"],

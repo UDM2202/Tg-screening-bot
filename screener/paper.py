@@ -30,7 +30,9 @@ def record_marks(db: Database, markets: dict[str, Market], cfg: PaperConfig, now
         if not ref:
             continue
         m = markets.get(row["address"])
-        dead = m is None or not m.price_usd or m.liquidity_usd < DEAD_LIQUIDITY_USD
+        if m is None and row["kind"] == "near_bond":
+            continue  # a curve coin DexScreener hasn't listed yet: unknown, not dead
+        dead = m is None or not m.price_usd or (not m.on_curve and m.liquidity_usd < DEAD_LIQUIDITY_USD)
         ret = -1.0 if dead else m.price_usd / ref - 1
         if row["paper_tp_at"] is None and ret >= cfg.take_profit_x - 1:
             db.set_paper_mark(row["address"], tp_at=now)
@@ -75,16 +77,26 @@ def report(db: Database, cfg: PaperConfig) -> str:
         "tp": f"Sell at {cfg.take_profit_x:g}x",
         "both": f"{cfg.take_profit_x:g}x or stop -{cfg.stop_loss_pct:g}%",
     }
-    lines = [head, f"Closed trades: {len(rows)} (alerts at least 24h old){note}", "<pre>"]
-    lines.append(f"{'strategy':<17}{'P&L':>9}{'avg':>8}{'wins':>6}")
-    for key, name in names.items():
-        pnl = [cfg.stake_usd * (_strategy_returns(r, cfg)[key] - fee) for r in rows]
-        total = sum(pnl)
-        wins = sum(p > 0 for p in pnl) / len(pnl) * 100
-        lines.append(
-            f"{name[:17]:<17}{_money(total):>9}{_money(total / len(pnl)):>8}{wins:>5.0f}%"
-        )
-    lines.append("</pre>")
+    lines = [head, f"Closed trades: {len(rows)} (alerts at least 24h old){note}"]
+    sections = [("All alerts", rows)]
+    near = [r for r in rows if r["kind"] == "near_bond"]
+    if near:  # compare the two alert types once near-bond trades exist
+        sections += [("Graduated", [r for r in rows if r["kind"] != "near_bond"]), ("⚡ Near bond", near)]
+    for title, group in sections:
+        if not group:
+            continue
+        if len(sections) > 1:
+            lines.append(f"<b>{title}</b> ({len(group)})")
+        lines.append("<pre>")
+        lines.append(f"{'strategy':<17}{'P&L':>9}{'avg':>8}{'wins':>6}")
+        for key, name in names.items():
+            pnl = [cfg.stake_usd * (_strategy_returns(r, cfg)[key] - fee) for r in group]
+            total = sum(pnl)
+            wins = sum(p > 0 for p in pnl) / len(pnl) * 100
+            lines.append(
+                f"{name[:17]:<17}{_money(total):>9}{_money(total / len(pnl)):>8}{wins:>5.0f}%"
+            )
+        lines.append("</pre>")
     tp_hits = sum(r["paper_tp_at"] is not None for r in rows)
     stop_hits = sum(r["paper_stop_at"] is not None for r in rows)
     lines.append(

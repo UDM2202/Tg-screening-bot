@@ -34,6 +34,11 @@ class Market:
     sells_m5: int = 0
     price_change_m5: float | None = None
 
+    @property
+    def on_curve(self) -> bool:
+        """Still trading on pump.fun's bonding curve, whose liquidity can't be pulled."""
+        return self.dex_id in ("pumpfun", "pump.fun curve")
+
     def age_minutes(self, now: datetime) -> float | None:
         if self.created_at is None:
             return None

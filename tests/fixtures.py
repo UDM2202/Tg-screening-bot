@@ -77,3 +77,38 @@ def goplus_result(mint: str, **overrides) -> dict:
     }
     data.update(overrides)
     return {"code": 1, "message": "OK", "result": {mint: data}}
+
+CURVE = "CurveCoin1111111111111111111111111111111pump"
+CURVE_ACCOUNT = "BondingCurve11111111111111111111111111111111"
+CURVE_TOKENS_ACCOUNT = "CurveTokens111111111111111111111111111111111"
+
+
+def pumpfun_coin(mint: str = CURVE, *, progress: float = 90.0, mcap: float = 65_000, age_min: float = 30,
+                 complete: bool = False) -> dict:
+    tokens_left = 793_100_000 * (1 - progress / 100)
+    return {
+        "mint": mint,
+        "name": "Curve Coin",
+        "symbol": "CURVE",
+        "creator": CREATOR,
+        "bonding_curve": CURVE_ACCOUNT,
+        "associated_bonding_curve": CURVE_TOKENS_ACCOUNT,
+        "real_token_reserves": int(tokens_left * 10**6),
+        "usd_market_cap": mcap,
+        "created_timestamp": int((time.time() - age_min * 60) * 1000),
+        "complete": complete,
+        "twitter": "https://x.com/curvecoin",
+        "website": "https://curve.example",
+    }
+
+
+def curve_rug_report() -> dict:
+    """A bonding-curve coin: no LP market yet, and the curve's token account holds the unsold supply."""
+    report = rug_report()
+    report["markets"] = []
+    report["topHolders"] = [
+        {"address": CURVE_TOKENS_ACCOUNT, "owner": CURVE_ACCOUNT, "pct": 35.0},
+        *({"address": f"c{i}", "owner": f"co{i}", "pct": 1.5} for i in range(10)),
+    ]
+    report["risks"] = [{"name": "Large Amount of LP Unlocked", "level": "danger"}]
+    return report
