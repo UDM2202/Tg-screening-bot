@@ -370,7 +370,9 @@ async def test_near_bond_scan_alerts_once_and_tracks_type(setup, monkeypatch):
         await s.scan_near_bond()
         assert len([m for m in apis.sent if CURVE in m["text"]]) == 1  # no repeat alert
 
-        assert "⚡ Near-bond scan OK" in s.handle_command("/status")
+        status = s.handle_command("/status")
+        assert "⚡ Near-bond scan OK" in status
+        assert "already judged" in status and "Near-bond so far: 1 alerted" in status
         apis.pumpfun_down = True
         real_sleep = asyncio.sleep
         monkeypatch.setattr("screener.http.asyncio.sleep", lambda *_: real_sleep(0))

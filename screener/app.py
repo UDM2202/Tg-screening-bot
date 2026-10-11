@@ -8,6 +8,7 @@ import json
 import logging
 import re
 import time
+from collections import Counter
 from dataclasses import asdict
 from datetime import datetime, timezone
 from html import escape
@@ -52,6 +53,17 @@ HELP = (
     "/pause – stop sending alerts (screening and tracking continue)\n"
     "/resume – start sending alerts again"
 )
+
+
+def _near_bond_miss(reason: str) -> str:
+    """Short label for why a curve coin didn't qualify, for the /status breakdown."""
+    if "bonded" in reason:
+        return "outside bonded range"
+    if "market cap" in reason:
+        return "market cap out of range"
+    if "younger" in reason:
+        return "too young"
+    return "down from peak"
 
 
 class Screener:
@@ -219,7 +231,15 @@ class Screener:
             return f"⚡ Near-bond scan failing: {escape(error)}"
         if not last_ok:
             return "⚡ Near-bond scan: waiting for first check"
-        return f"⚡ Near-bond scan OK, last {age_text((time.time() - float(last_ok)) / 60)} ago"
+        line = f"⚡ Near-bond scan OK, last {age_text((time.time() - float(last_ok)) / 60)} ago"
+        funnel = self.db.get_meta("near_bond_funnel")
+        if funnel:
+            line += f"\n  Last scan: {escape(funnel)}"
+        row = self.db.conn.execute(
+            "SELECT SUM(status = 'alerted') AS a, SUM(status = 'rejected') AS r FROM tokens WHERE kind = 'near_bond'"
+        ).fetchone()
+        line += f"\n  Near-bond so far: {row['a'] or 0} alerted, {row['r'] or 0} rejected by rug checks"
+        return line
 
     async def scan_near_bond(self) -> None:
         nb = self.cfg.near_bond
@@ -234,13 +254,19 @@ class Screener:
         if len(self.curve_peaks) > 5000:
             self.curve_peaks.clear()
         now = datetime.now(timezone.utc)
+        judged = checked = 0
+        misses: Counter[str] = Counter()
         for coin in coins:
             peak = max(self.curve_peaks.get(coin.mint, 0.0), coin.market_cap_usd)
             self.curve_peaks[coin.mint] = peak
             if self.db.status(coin.mint) not in (None, "watching"):
+                judged += 1
                 continue  # already alerted or judged, here or after graduating
-            if near_bond_reasons(coin, nb, now, peak):
+            reasons = near_bond_reasons(coin, nb, now, peak)
+            if reasons:
+                misses[_near_bond_miss(reasons[0])] += 1
                 continue
+            checked += 1
             async with self.rug_check_slots:
                 try:
                     await self._check_curve_coin(coin)
@@ -248,6 +274,12 @@ class Screener:
                     log.warning("Rug checks unavailable for %s, retrying next scan: %s", coin.symbol, exc)
                 except Exception:
                     log.exception("Unexpected error checking curve coin %s", coin.mint)
+        parts = [f"{self.pumpfun.last_listed} listed, {len(coins)} still on curve"]
+        parts += [f"{n} {why}" for why, n in misses.most_common()]
+        if judged:
+            parts.append(f"{judged} already judged")
+        parts.append(f"{checked} rug-checked")
+        self.db.set_meta("near_bond_funnel", ", ".join(parts))
 
     async def _check_curve_coin(self, coin: CurveCoin) -> None:
         t1 = self.cfg.tier1
