@@ -19,6 +19,15 @@ def test_bonding_progress_from_reserves():
     assert bonding_progress({}) is None
 
 
+def test_bonding_progress_from_market_cap_in_sol():
+    assert round(bonding_progress({"market_cap": 27.96})) == 0
+    assert round(bonding_progress({"market_cap": 410.9})) == 100
+    # Market cap wins over reserves that are zeroed or in another unit in the coin list.
+    assert round(bonding_progress({"market_cap": 249.5, "real_token_reserves": 0})) == 90
+    # A market cap that can't be in SOL (here, USD) is ignored in favour of the reserves.
+    assert round(bonding_progress({"market_cap": 65_000, "real_token_reserves": 79_310_000 * 10**6})) == 90
+
+
 def test_parse_coin_skips_graduated_coins():
     coin = parse_coin(pumpfun_coin())
     assert coin.symbol == "CURVE" and round(coin.progress_pct) == 90

@@ -86,6 +86,7 @@ CURVE_TOKENS_ACCOUNT = "CurveTokens111111111111111111111111111111111"
 def pumpfun_coin(mint: str = CURVE, *, progress: float = 90.0, mcap: float = 65_000, age_min: float = 30,
                  complete: bool = False) -> dict:
     tokens_left = 793_100_000 * (1 - progress / 100)
+    virtual_tokens = tokens_left + 279_900_000
     return {
         "mint": mint,
         "name": "Curve Coin",
@@ -95,6 +96,7 @@ def pumpfun_coin(mint: str = CURVE, *, progress: float = 90.0, mcap: float = 65_
         "associated_bonding_curve": CURVE_TOKENS_ACCOUNT,
         "real_token_reserves": int(tokens_left * 10**6),
         "usd_market_cap": mcap,
+        "market_cap": 30 * 1_073_000_000 * 1e9 / virtual_tokens**2,  # in SOL
         "created_timestamp": int((time.time() - age_min * 60) * 1000),
         "complete": complete,
         "twitter": "https://x.com/curvecoin",

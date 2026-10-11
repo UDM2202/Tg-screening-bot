@@ -275,6 +275,9 @@ class Screener:
                 except Exception:
                     log.exception("Unexpected error checking curve coin %s", coin.mint)
         parts = [f"{self.pumpfun.last_listed} listed, {len(coins)} still on curve"]
+        if coins:
+            progress = sorted(c.progress_pct for c in coins)
+            parts.append(f"bonded {progress[0]:.0f}-{progress[-1]:.0f}% (median {progress[len(progress) // 2]:.0f}%)")
         parts += [f"{n} {why}" for why, n in misses.most_common()]
         if judged:
             parts.append(f"{judged} already judged")

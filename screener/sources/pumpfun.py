@@ -6,6 +6,7 @@ excluding ones that already graduated, are exactly the ones nearest to bonding.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
@@ -21,6 +22,12 @@ TOTAL_SUPPLY_TOKENS = 1_000_000_000
 CURVE_TOKENS = 793_100_000
 # Virtual token reserves start at 1,073M (the curve tokens plus a 279.9M offset).
 VIRTUAL_TOKEN_OFFSET = 279_900_000
+# Constant product of the curve: it starts at 30 virtual SOL against 1,073M virtual tokens.
+CURVE_K = 30 * (CURVE_TOKENS + VIRTUAL_TOKEN_OFFSET)
+# Market cap in SOL runs from about 28 at launch to about 411 at bonding. Values well outside
+# that aren't a curve market cap in SOL (e.g. a USD figure), so they're ignored.
+MIN_CURVE_MCAP_SOL = 20
+MAX_CURVE_MCAP_SOL = 450
 HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; tg-screening-bot)", "Accept": "application/json"}
 
 
@@ -73,17 +80,27 @@ def _num(value: Any) -> float | None:
         return None
 
 
+def _progress_from_virtual_tokens(virtual_tokens: float) -> float:
+    return max(0.0, min(100.0, (1 - (virtual_tokens - VIRTUAL_TOKEN_OFFSET) / CURVE_TOKENS) * 100))
+
+
 def bonding_progress(coin: dict[str, Any]) -> float | None:
-    """Percent of the curve's tokens sold (100 = bonded)."""
+    """Percent of the curve's tokens sold (100 = bonded).
+
+    Prefers the market cap in SOL: the curve is fixed, so price alone says how far along it is,
+    whatever units the reserve fields come in. Reserves are the fallback.
+    """
+    mcap_sol = _num(coin.get("market_cap"))
+    if mcap_sol and MIN_CURVE_MCAP_SOL <= mcap_sol <= MAX_CURVE_MCAP_SOL:
+        return _progress_from_virtual_tokens(math.sqrt(CURVE_K * TOTAL_SUPPLY_TOKENS / mcap_sol))
     real = _num(coin.get("real_token_reserves"))
     if real is not None:
         tokens_left = real / 10**TOKEN_DECIMALS
-    else:
-        virtual = _num(coin.get("virtual_token_reserves"))
-        if virtual is None:
-            return None
-        tokens_left = virtual / 10**TOKEN_DECIMALS - VIRTUAL_TOKEN_OFFSET
-    return max(0.0, min(100.0, (1 - tokens_left / CURVE_TOKENS) * 100))
+        return max(0.0, min(100.0, (1 - tokens_left / CURVE_TOKENS) * 100))
+    virtual = _num(coin.get("virtual_token_reserves"))
+    if virtual is None:
+        return None
+    return _progress_from_virtual_tokens(virtual / 10**TOKEN_DECIMALS)
 
 
 def parse_coin(coin: dict[str, Any]) -> CurveCoin | None:
