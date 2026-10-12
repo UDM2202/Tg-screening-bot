@@ -23,6 +23,7 @@ class FakeApis:
         self.txns_m5 = (5, 5, 0.0)  # buys, sells, price change %
         self.pumpfun_coins = [pumpfun_coin(), pumpfun_coin("Stalled111111111111111111111111111111111pump", progress=50)]
         self.pumpfun_down = False
+        self.pumpfun_requests = 0
         self.sent: list[dict] = []
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
@@ -51,7 +52,10 @@ class FakeApis:
         if "pump.fun" in url and "/coins" in url:
             if self.pumpfun_down:
                 return httpx.Response(503)
-            return httpx.Response(200, json=self.pumpfun_coins)
+            offset = int(request.url.params.get("offset", 0))
+            limit = int(request.url.params.get("limit", 50))
+            self.pumpfun_requests += 1
+            return httpx.Response(200, json=self.pumpfun_coins[offset:offset + limit])
         if "rugcheck" in url:
             mint = re.search(r"/tokens/([^/]+)/report", url).group(1)
             if mint == CURVE:
@@ -381,6 +385,18 @@ async def test_near_bond_scan_alerts_once_and_tracks_type(setup, monkeypatch):
         monkeypatch.setattr("screener.http.asyncio.sleep", lambda *_: real_sleep(0))
         await s.scan_near_bond()
         assert "⚡ Near-bond scan failing" in s.handle_command("/status")
+
+
+async def test_near_bond_scan_pages_past_coins_above_the_range(setup):
+    apis, cfg, db = setup
+    cfg.near_bond.fetch_limit = 2
+    big = [pumpfun_coin(f"Big{i}11111111111111111111111111111111111pump", mcap=900_000) for i in range(3)]
+    apis.pumpfun_coins = big + [pumpfun_coin(), pumpfun_coin("Small111111111111111111111111111111111pump", mcap=5_000)]
+    async with httpx.AsyncClient(transport=httpx.MockTransport(apis)) as client:
+        s = Screener(cfg, client, db)
+        await s.scan_near_bond()
+        assert apis.pumpfun_requests == 3  # stops once a page goes below the minimum market cap
+        assert db.status(CURVE) == "alerted"  # on page 2, below the big coins
 
 
 async def test_near_bond_coin_missing_from_dexscreener_is_not_counted_dead(setup):

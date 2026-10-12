@@ -248,8 +248,12 @@ class Screener:
         if not raw:
             return "No near-bond scan data yet."
         now = datetime.now(timezone.utc)
-        lines = [f"<b>Near-bond scan, top {min(limit, len(raw))} of {len(raw)}</b>"]
-        for c in raw[:limit]:
+        # Skip the coins above the alert range: they're the top of pump.fun's list but never alert.
+        in_range = [c for c in raw if (c.get("usd_market_cap") or 0) <= self.cfg.near_bond.max_market_cap_usd]
+        shown = (in_range or raw)[:limit]
+        lines = [f"<b>Near-bond scan: {len(raw)} coins, {len(in_range)} at or under the max market cap. "
+                 f"First {len(shown)}:</b>"]
+        for c in shown:
             coin = parse_coin(c)
             if coin is None:
                 verdict = "graduated or unreadable"
@@ -267,7 +271,7 @@ class Screener:
     async def scan_near_bond(self) -> None:
         nb = self.cfg.near_bond
         try:
-            coins = await self.pumpfun.top_unbonded(nb.fetch_limit)
+            coins = await self.pumpfun.top_unbonded(nb.fetch_limit, nb.fetch_pages, nb.min_market_cap_usd)
         except ApiError as exc:
             self.db.set_meta("near_bond_error", str(exc)[:200])
             log.warning("Near-bond scan failed: %s", exc)

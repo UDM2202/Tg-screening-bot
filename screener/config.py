@@ -101,12 +101,14 @@ class NearBondConfig:
     enabled: bool = True
     api: str = "https://frontend-api-v3.pump.fun"
     poll_seconds: int = 60
-    # How many of pump.fun's largest not-yet-bonded coins to fetch each poll.
+    # pump.fun's not-yet-bonded coins are fetched largest first, fetch_limit per page, paging
+    # down until market caps drop below min_market_cap_usd (at most fetch_pages pages).
     fetch_limit: int = 50
+    fetch_pages: int = 4
     min_progress_pct: float = 85
     max_progress_pct: float = 99
     min_age_minutes: float = 10
-    min_market_cap_usd: float = 30_000
+    min_market_cap_usd: float = 15_000
     max_market_cap_usd: float = 300_000
     max_drop_from_peak_pct: float = 25
 

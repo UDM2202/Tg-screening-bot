@@ -19,13 +19,15 @@ def test_bonding_progress_from_reserves():
     assert bonding_progress({}) is None
 
 
-def test_bonding_progress_from_market_cap_in_sol():
-    assert round(bonding_progress({"market_cap": 27.96})) == 0
-    assert round(bonding_progress({"market_cap": 410.9})) == 100
-    # Market cap wins over reserves that are zeroed or in another unit in the coin list.
-    assert round(bonding_progress({"market_cap": 249.5, "real_token_reserves": 0})) == 90
-    # A market cap that can't be in SOL (here, USD) is ignored in favour of the reserves.
-    assert round(bonding_progress({"market_cap": 65_000, "real_token_reserves": 79_310_000 * 10**6})) == 90
+def test_bonding_progress_on_real_pump_fun_data():
+    # Values from pump.fun's coin list. CTO and TATE are on curves with far more virtual SOL
+    # than usual, so their market cap is high for their progress; the token side still works.
+    cto = {"real_token_reserves": 247183359118514, "virtual_token_reserves": 527083359118514,
+           "virtual_sol_reserves": 3390532134277, "market_cap": 6432.6}
+    tate = {"real_token_reserves": 92915004852133, "market_cap": 5280.2}
+    assert round(bonding_progress(cto)) == 69
+    assert round(bonding_progress(tate)) == 88
+    assert bonding_progress({"real_token_reserves": 1636639617621}) > 99  # stuck waiting to migrate
 
 
 def test_parse_coin_skips_graduated_coins():
