@@ -331,7 +331,9 @@ async def test_why_explains_each_state(setup):
         assert "👀 On the watchlist" in young and "• younger than 15m" in young
         rug = await s.handle_message(f"/why {RUG}")
         assert "❌ Rejected" in rug and "• mint authority not revoked" in rug
-        assert "🟢 Alerted" in await s.handle_message("/why", reply_to=101)
+        alerted = await s.handle_message("/why", reply_to=101)
+        assert "🟢 Alerted" in alerted and "At the alert:" in alerted
+        assert "MC $200.0k" in alerted and "Top 10 20.0%" in alerted and "Insider wallets (RugCheck): 0" in alerted
         assert "haven't seen" in await s.handle_message("/why 11111111111111111111111111111111")
         assert (await s.handle_message("/why")).startswith("Which coin?")
 

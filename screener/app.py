@@ -199,6 +199,9 @@ class Screener:
                 "socials": socials.score,
                 "age_minutes": market.age_minutes(datetime.now(timezone.utc)),
                 "insiders": rug.insiders_detected,
+                "top10_pct": rug.top10_pct,
+                "max_holder_pct": rug.max_holder_pct,
+                "dev_pct": rug.dev_pct,
                 "change_h1": market.price_change_h1,
                 "vol_liq": market.volume_h24 / market.liquidity_usd if market.liquidity_usd else None,
             },
@@ -345,6 +348,9 @@ class Screener:
                 "socials": socials.score,
                 "age_minutes": coin.age_minutes(datetime.now(timezone.utc)),
                 "insiders": rug.insiders_detected,
+                "top10_pct": rug.top10_pct,
+                "max_holder_pct": rug.max_holder_pct,
+                "dev_pct": rug.dev_pct,
                 "progress": coin.progress_pct,
             },
             **decision,
@@ -495,6 +501,8 @@ class Screener:
             lines.append(f"Last checked {age_text(ago / 60)} ago")
         if row["peak_mcap"]:
             lines.append(f"Highest MC seen: {usd(row['peak_mcap'])}")
+        if row["status"] == "alerted":
+            lines += ["", *self._alert_facts(row)]
         if row["status"] == "rejected":
             reasons = json.loads(row["details"] or "{}").get("reasons", [])
             lines += ["", "<b>Rug checks failed:</b>"] + [f"• {escape(r)}" for r in reasons]
@@ -507,6 +515,30 @@ class Screener:
             else:
                 lines += ["", "Passed the market check; rug checks are pending or temporarily unavailable."]
         return "\n".join(lines)
+
+    @staticmethod
+    def _alert_facts(row) -> list[str]:
+        """What the bot saw when it alerted: the numbers to compare with what happened next."""
+        details = json.loads(row["details"] or "{}")
+        lines = ["<b>At the alert:</b>"]
+        if row["decided_at"]:
+            lines.append(f"• Sent {age_text((time.time() - row['decided_at']) / 60)} ago")
+        if row["ref_mcap"]:
+            lines.append(f"• MC {usd(row['ref_mcap'])}")
+        if details.get("age_minutes") is not None:
+            lines.append(f"• Coin age {age_text(details['age_minutes'])}")
+        holders = [
+            f"{label} {details[key]:.1f}%"
+            for label, key in (("Top 10", "top10_pct"), ("max wallet", "max_holder_pct"), ("dev", "dev_pct"))
+            if details.get(key) is not None
+        ]
+        if holders:
+            lines.append("• " + " · ".join(holders))
+        if details.get("insiders") is not None:
+            lines.append(f"• Insider wallets (RugCheck): {details['insiders']}")
+        for warning in details.get("warnings", []):
+            lines.append(f"• ⚠️ {escape(str(warning))}")
+        return lines
 
     def _resolve_coin(self, arg: str, reply_to: int | None) -> str | None:
         if reply_to:
