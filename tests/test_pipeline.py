@@ -328,7 +328,7 @@ async def test_why_explains_each_state(setup):
         s = Screener(cfg, client, db)
         await s.run_cycle()
         young = await s.handle_message("/why $YNG")
-        assert "👀 On the watchlist" in young and "• younger than 120m" in young
+        assert "👀 On the watchlist" in young and "• younger than 15m" in young
         rug = await s.handle_message(f"/why {RUG}")
         assert "❌ Rejected" in rug and "• mint authority not revoked" in rug
         alerted = await s.handle_message("/why", reply_to=101)

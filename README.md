@@ -21,7 +21,7 @@ It also records the price of every coin it judged 1h, 24h and 7d later, for aler
    - Liquidity ≥ $8k
    - Market cap $30k to $300k
    - Liquidity ≥ 5% of market cap
-   - Age 2 h to 24 h. This was 15 minutes until tracking showed that freshly graduated coins nearly always dump; waiting 2 hours skips the launch-and-dump window. It's an experiment: `/stats new` and `/paper new` show how it does.
+   - Age 15 min to 24 h
    - 24h volume ≥ 1× liquidity
    - Not more than 25% below the highest market cap the bot has seen for it. This stops alerts right after a dump, when the dump's own volume would otherwise make the coin pass.
    - Not down 20% or more in the last 5 minutes, which means someone is dumping right now.
