@@ -26,7 +26,7 @@ from .sources.dexscreener import DexScreener, Market
 from .sources.goplus import GoPlus
 from .sources.helius import HeliusPools
 from .sources.jupiter import Jupiter
-from .sources.pumpfun import CurveCoin, PumpFun
+from .sources.pumpfun import CurveCoin, PumpFun, parse_coin
 from .sources.pumpportal import stream_migrations
 from .sources.rugcheck import RugCheck
 from .telegram import Telegram
@@ -50,6 +50,7 @@ HELP = (
     "/positions – coins you're holding and how they're doing\n"
     "/paper – would $5 on every alert have made money? (after fees)\n"
     "/why – why a coin was or wasn't alerted (address, $SYMBOL, or reply)\n"
+    "/nearbond – raw pump.fun data from the last near-bond scan (troubleshooting)\n"
     "/pause – stop sending alerts (screening and tracking continue)\n"
     "/resume – start sending alerts again"
 )
@@ -241,6 +242,28 @@ class Screener:
         line += f"\n  Near-bond so far: {row['a'] or 0} alerted, {row['r'] or 0} rejected by rug checks"
         return line
 
+    def near_bond_debug(self, limit: int = 8) -> str:
+        """The raw pump.fun fields behind the near-bond numbers, to check the bonded % maths."""
+        raw = self.pumpfun.last_raw
+        if not raw:
+            return "No near-bond scan data yet."
+        now = datetime.now(timezone.utc)
+        lines = [f"<b>Near-bond scan, top {min(limit, len(raw))} of {len(raw)}</b>"]
+        for c in raw[:limit]:
+            coin = parse_coin(c)
+            if coin is None:
+                verdict = "graduated or unreadable"
+            else:
+                reasons = near_bond_reasons(coin, self.cfg.near_bond, now, self.curve_peaks.get(coin.mint))
+                verdict = f"{coin.progress_pct:.0f}% bonded: " + ("; ".join(reasons) if reasons else "qualifies")
+            fields = " ".join(
+                f"{key}={c.get(key)}"
+                for key in ("usd_market_cap", "market_cap", "real_token_reserves", "virtual_token_reserves",
+                            "virtual_sol_reserves", "complete")
+            )
+            lines.append(f"\n<b>${escape(str(c.get('symbol')))}</b> {escape(verdict)}\n<code>{escape(fields)}</code>")
+        return "\n".join(lines)
+
     async def scan_near_bond(self) -> None:
         nb = self.cfg.near_bond
         try:
@@ -274,7 +297,7 @@ class Screener:
                     log.warning("Rug checks unavailable for %s, retrying next scan: %s", coin.symbol, exc)
                 except Exception:
                     log.exception("Unexpected error checking curve coin %s", coin.mint)
-        parts = [f"{self.pumpfun.last_listed} listed, {len(coins)} still on curve"]
+        parts = [f"{len(self.pumpfun.last_raw)} listed, {len(coins)} still on curve"]
         if coins:
             progress = sorted(c.progress_pct for c in coins)
             parts.append(f"bonded {progress[0]:.0f}-{progress[-1]:.0f}% (median {progress[len(progress) // 2]:.0f}%)")
@@ -502,6 +525,8 @@ class Screener:
             return paper.report(self.db, self.cfg.paper)
         if cmd == "/why":
             return self.explain(self._resolve_coin(arg, reply_to))
+        if cmd == "/nearbond":
+            return self.near_bond_debug()
         if cmd not in ("/bought", "/sold", "/mute", "/positions"):
             return self.handle_command(text)
 

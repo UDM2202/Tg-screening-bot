@@ -117,6 +117,15 @@ def _volume_bucket(row) -> str | None:
     return "vol 2-5x liq" if ratio < 5 else "vol 5x+ liq"
 
 
+def _age_bucket(row) -> str | None:
+    age = json.loads(row["details"] or "{}").get("age_minutes")
+    if age is None:
+        return None
+    if age < 30:
+        return "under 30m old"
+    return "30m-2h old" if age < 120 else "over 2h old"
+
+
 def _kind_bucket(row) -> str:
     return "near bond" if row["kind"] == "near_bond" else "graduated"
 
@@ -124,6 +133,7 @@ def _kind_bucket(row) -> str:
 # Ways to split alerted coins in /stats: (title, row labels in order, labeller).
 ALERT_BREAKDOWNS = [
     ("Alerts by type", ["graduated", "near bond"], _kind_bucket),
+    ("Alerts by coin age at alert", ["under 30m old", "30m-2h old", "over 2h old"], _age_bucket),
     ("Alerts by market cap at alert", ["under $100k", "$100k-$300k", "over $300k"], _mcap_bucket),
     ("Alerts by price change in the hour before", ["falling", "up 0-100%", "up over 100%"], _pump_bucket),
     ("Alerts by 24h volume vs liquidity", ["vol <2x liq", "vol 2-5x liq", "vol 5x+ liq"],

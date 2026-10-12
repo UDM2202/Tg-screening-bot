@@ -131,7 +131,7 @@ class PumpFun:
     def __init__(self, client: httpx.AsyncClient, base_url: str):
         self.client = client
         self.base = base_url.rstrip("/")
-        self.last_listed = 0  # coins in the last response, before dropping graduated ones
+        self.last_raw: list[dict[str, Any]] = []  # the last response, for /nearbond
 
     async def top_unbonded(self, limit: int) -> list[CurveCoin]:
         """Coins still on the curve, largest market cap (closest to bonding) first."""
@@ -152,5 +152,5 @@ class PumpFun:
             data = data.get("coins") or data.get("data") or []
         if not isinstance(data, list):
             raise ApiError(f"pump.fun: unexpected response {str(data)[:200]}")
-        self.last_listed = len(data)
+        self.last_raw = [raw for raw in data if isinstance(raw, dict)]
         return [c for c in (parse_coin(raw) for raw in data if isinstance(raw, dict)) if c]

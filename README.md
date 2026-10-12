@@ -83,6 +83,7 @@ Each new pool costs about one credit for the transaction lookup. Pick which DEXe
 | `/sold` | Stop watching a coin (reply, address or `$SYMBOL`). |
 | `/mute` | Reply to an alert to stop its follow-ups. |
 | `/why` | Why a coin was or wasn't alerted: send the address or `$SYMBOL`, or reply to an alert. |
+| `/nearbond` | The pump.fun coins from the last near-bond scan, with the raw fields and why each did or didn't qualify. For troubleshooting. |
 | `/paper` | Paper trading: what $5 on every alert would have made after fees, holding 24h vs selling at 2x vs 2x-or-stop-loss. |
 | `/positions` | Coins you're holding: multiple since entry, current and peak market cap. |
 | `/pause` / `/resume` | Stop or restart alerts. Screening and tracking keep running. |
