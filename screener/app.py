@@ -49,6 +49,7 @@ HELP = (
     "/mute – stop follow-ups for an alert (reply to it)\n"
     "/positions – coins you're holding and how they're doing\n"
     "/paper – would $5 on every alert have made money? (after fees)\n"
+    "/paper new – same, only alerts under the current filter rules\n"
     "/why – why a coin was or wasn't alerted (address, $SYMBOL, or reply)\n"
     "/nearbond – raw pump.fun data from the last near-bond scan (troubleshooting)\n"
     "/pause – stop sending alerts (screening and tracking continue)\n"
@@ -558,6 +559,11 @@ class Screener:
         cmd = parts[0].split("@")[0].lower() if parts else ""
         arg = parts[1] if len(parts) > 1 else ""
         if cmd == "/paper":
+            if arg.strip().lower() == "new":
+                since = self.db.get_meta("rules_changed_at")
+                if not since:
+                    return "The bot hasn't recorded a rules change yet. Restart it once and try again."
+                return paper.report(self.db, self.cfg.paper, since=float(since))
             return paper.report(self.db, self.cfg.paper)
         if cmd == "/why":
             return self.explain(self._resolve_coin(arg, reply_to))

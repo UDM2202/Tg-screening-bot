@@ -11,7 +11,7 @@ CREATOR = "Creator1111111111111111111111111111111111111"
 POOL = "PoolAcct111111111111111111111111111111111111"
 
 
-def pair(address: str, *, symbol: str = "GOOD", age_min: float = 120, liq: float = 20_000,
+def pair(address: str, *, symbol: str = "GOOD", age_min: float = 180, liq: float = 20_000,
          mcap: float = 200_000, vol: float = 60_000, price: float = 0.0002, socials: bool = True) -> dict:
     info = {}
     if socials:

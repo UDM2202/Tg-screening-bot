@@ -23,7 +23,10 @@ tier2:
   # Skip coins already above this market cap: the bigger it is, the harder a 2x.
   max_market_cap_usd: 300000
   min_liquidity_to_mcap_pct: 5
-  min_age_minutes: 15
+  # Experiment: only alert coins that survived 2 hours after graduating. In /stats, alerts
+  # under 30 minutes old lost 98% (median) and coins over 2h did best. Compare with /stats new
+  # and /paper new; set back to 15 to undo.
+  min_age_minutes: 120
   max_age_hours: 24
   min_volume_to_liquidity: 1.0
   # Stop watching coins that are still this thin after this long. Most new pools

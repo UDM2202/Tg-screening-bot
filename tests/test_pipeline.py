@@ -138,7 +138,7 @@ async def test_pause_still_logs_but_does_not_send(setup):
         assert "Alerted: 1" in s.handle_command("/status")
         status = s.handle_command("/status")
         assert "Last scan:" in status and "took" in status
-        assert "Coin age at alert (last 1): median 2h 0m" in status
+        assert "Coin age at alert (last 1): median 3h 0m" in status
         assert GOOD in s.handle_command("/recent")
 
 
@@ -328,7 +328,7 @@ async def test_why_explains_each_state(setup):
         s = Screener(cfg, client, db)
         await s.run_cycle()
         young = await s.handle_message("/why $YNG")
-        assert "👀 On the watchlist" in young and "• younger than 15m" in young
+        assert "👀 On the watchlist" in young and "• younger than 120m" in young
         rug = await s.handle_message(f"/why {RUG}")
         assert "❌ Rejected" in rug and "• mint authority not revoked" in rug
         alerted = await s.handle_message("/why", reply_to=101)

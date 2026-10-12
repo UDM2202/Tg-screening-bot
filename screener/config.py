@@ -29,7 +29,7 @@ class Tier2Config:
     min_market_cap_usd: float = 30000
     max_market_cap_usd: float = 300_000
     min_liquidity_to_mcap_pct: float = 5
-    min_age_minutes: float = 15
+    min_age_minutes: float = 120
     max_age_hours: float = 24
     min_volume_to_liquidity: float = 1.0
     give_up_below_liquidity_usd: float = 2000

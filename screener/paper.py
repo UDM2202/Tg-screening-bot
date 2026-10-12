@@ -55,9 +55,12 @@ def _strategy_returns(row, cfg: PaperConfig) -> dict[str, float]:
     return {"hold": held, "tp": take_profit, "both": both}
 
 
-def report(db: Database, cfg: PaperConfig) -> str:
+def report(db: Database, cfg: PaperConfig, since: float | None = None) -> str:
+    """since: only alerts sent after this time (for /paper new); None = all tracked alerts."""
     started = float(db.get_meta(STARTED_KEY) or "inf")
     closed = [r for r in db.paper_closed(HOLD_CHECKPOINT) if r["ref_price"]]
+    if since is not None:
+        closed = [r for r in closed if r["decided_at"] >= since]
     # Only alerts whose whole window was tracked; older ones would look like pure holds.
     rows = [r for r in closed if r["decided_at"] >= started]
     skipped = len(closed) - len(rows)
@@ -65,6 +68,8 @@ def report(db: Database, cfg: PaperConfig) -> str:
     head = (
         f"📒 <b>Paper trading</b>: ${cfg.stake_usd:g} on every alert, {cfg.fee_pct:g}% fees per trade"
     )
+    if since is not None:
+        head += "\nOnly alerts since the filter rules last changed"
     note = (
         f"\n{skipped} older alert(s) skipped: they were sent before paper tracking started."
         if skipped else ""
