@@ -60,6 +60,7 @@ def rug_report(*, mint_auth=None, freeze_auth=None, lp_locked=100.0, holders=Non
              "lp": {"lpLockedPct": lp_locked, "baseUSD": 10_000, "quoteUSD": 10_000}},
         ],
         "graphInsidersDetected": 0,
+        "totalHolders": 850,
     }
 
 

@@ -126,6 +126,17 @@ def _age_bucket(row) -> str | None:
     return "30m-2h old" if age < 120 else "over 2h old"
 
 
+def _holders_bucket(row) -> str | None:
+    holders = json.loads(row["details"] or "{}").get("holders")
+    if holders is None:
+        return None  # only recorded for alerts since this breakdown was added
+    if holders < 100:
+        return "under 100"
+    if holders < 300:
+        return "100-300"
+    return "300-1,000" if holders < 1000 else "1,000+"
+
+
 def _kind_bucket(row) -> str:
     return "near bond" if row["kind"] == "near_bond" else "graduated"
 
@@ -138,6 +149,8 @@ ALERT_BREAKDOWNS = [
     ("Alerts by price change in the hour before", ["falling", "up 0-100%", "up over 100%"], _pump_bucket),
     ("Alerts by 24h volume vs liquidity", ["vol <2x liq", "vol 2-5x liq", "vol 5x+ liq"],
      _volume_bucket),
+    ("Alerts by holder count at alert",
+     ["under 100", "100-300", "300-1,000", "1,000+"], _holders_bucket),
     ("Alerts by insider wallets", [f"0-{INSIDER_SPLIT} insiders", f"{INSIDER_SPLIT + 1}+ insiders"],
      _insider_bucket),
 ]

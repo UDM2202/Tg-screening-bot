@@ -28,6 +28,7 @@ class RugFacts:
     creator_rug_history: bool = False
     insiders_detected: int = 0
     score_normalised: float | None = None
+    total_holders: int | None = None  # every wallet holding the token, not just the top list
 
 
 def _num(value: Any) -> float:
@@ -35,6 +36,14 @@ def _num(value: Any) -> float:
         return float(value)
     except (TypeError, ValueError):
         return 0.0
+
+
+def _holder_count(report: dict[str, Any]) -> int | None:
+    for key in ("totalHolders", "holderCount", "holders"):
+        value = report.get(key)
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            return int(value)
+    return None
 
 
 def _pool_accounts(markets: list[dict[str, Any]]) -> set[str]:
@@ -107,6 +116,7 @@ def parse_report(report: dict[str, Any], extra_pool_accounts: set[str] | None = 
         creator_rug_history=history,
         insiders_detected=int(_num(report.get("graphInsidersDetected"))),
         score_normalised=report.get("score_normalised"),
+        total_holders=_holder_count(report),
     )
 
 

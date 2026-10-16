@@ -203,6 +203,7 @@ class Screener:
                 "top10_pct": rug.top10_pct,
                 "max_holder_pct": rug.max_holder_pct,
                 "dev_pct": rug.dev_pct,
+                "holders": rug.total_holders,
                 "change_h1": market.price_change_h1,
                 "vol_liq": market.volume_h24 / market.liquidity_usd if market.liquidity_usd else None,
             },
@@ -352,6 +353,7 @@ class Screener:
                 "top10_pct": rug.top10_pct,
                 "max_holder_pct": rug.max_holder_pct,
                 "dev_pct": rug.dev_pct,
+                "holders": rug.total_holders,
                 "progress": coin.progress_pct,
             },
             **decision,
@@ -535,6 +537,8 @@ class Screener:
         ]
         if holders:
             lines.append("• " + " · ".join(holders))
+        if details.get("holders") is not None:
+            lines.append(f"• Holders: {details['holders']:,}")
         if details.get("insiders") is not None:
             lines.append(f"• Insider wallets (RugCheck): {details['insiders']}")
         for warning in details.get("warnings", []):

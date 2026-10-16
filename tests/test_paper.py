@@ -79,3 +79,43 @@ def test_alerts_before_tracking_started_are_skipped():
     assert "Closed trades: 1 (alerts at least 24h old)" in report
     assert "1 older alert(s) skipped" in report
     assert "Reached 2x: 1/1" in report
+
+
+def test_exit_targets_compare_15x_2x_3x_and_split():
+    db = Database(":memory:")
+    t0 = time.time() - 25 * 3600
+    paper.record_marks(db, {}, CFG, t0 - 1)  # tracking (incl. exit targets) was running before these alerts
+    for a in ("fade", "runner", "dip"):
+        alert(db, a, t0)
+    # fade: 1.6x, then dies. runner: 3.5x, ends at 1.2x. dip: -60% first, then 1.8x, ends at 0.5x.
+    paper.record_marks(db, {"fade": market("fade", 1.6), "runner": market("runner", 1.7),
+                            "dip": market("dip", 0.4)}, CFG, t0 + 60)
+    paper.record_marks(db, {"fade": market("fade", 0.5), "runner": market("runner", 3.5),
+                            "dip": market("dip", 1.8)}, CFG, t0 + 120)
+    db.add_snapshot("fade", "24h", None, 0.0, None)
+    db.add_snapshot("runner", "24h", 1.2, 20_000, None)
+    db.add_snapshot("dip", "24h", 0.5, 20_000, None)
+
+    report = paper.report(db, CFG)
+    assert "<b>Exit targets</b> (3 alerts)" in report
+    assert "Reached 1.5x: 3/3 · 2x: 1/3 · 3x: 1/3" in report
+    # 1.5x: +50% three times = +150%, minus 3 x 5% fees -> +$6.75
+    assert re.search(r"Sell\ at\ 1\.5x\s+\+\$6\.75\s+\+\$2\.25\s+100%", report), report
+    # 3x: fade held (-100%), runner +200%, dip held (-50%) = +50% -> $2.50 - $0.75
+    assert re.search(r"Sell\ at\ 3x\s+\+\$1\.75", report), report
+    # 1.5x or stop: fade +50%, runner +50%, dip stopped at -60% = +40% -> $2.00 - $0.75
+    assert re.search(r"1\.5x\ or\ stop\s+\+\$1\.25", report), report
+    # ½/½: fade 25% - 50% = -25%; runner 25% + 100% = 125%; dip 25% - 25% = 0 -> +100% -> $5 - $0.75
+    assert re.search(r"½\ at\ 1\.5x,\ ½\ at\ 3x\s+\+\$4\.25", report), report
+
+
+def test_exit_targets_skip_alerts_from_before_they_were_tracked():
+    db = Database(":memory:")
+    t0 = time.time() - 25 * 3600
+    db.set_meta(paper.STARTED_KEY, str(t0 - 1))
+    alert(db, "a", t0)
+    db.add_snapshot("a", "24h", 1.0, 20_000, None)
+    paper.record_marks(db, {}, CFG, t0 + 25 * 3600)  # exit-target tracking starts after this alert
+    report = paper.report(db, CFG)
+    assert "Closed trades: 1" in report
+    assert "Comparing 1.5x, 2x and 3x targets for alerts from now on" in report

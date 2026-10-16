@@ -158,3 +158,10 @@ def test_tier2_skips_coins_above_300k_market_cap():
     assert tier2(market(mcap=250_000, liq=40_000, vol=60_000), cfg, NOW()).passed
     r = tier2(market(mcap=600_000, liq=66_000, vol=81_000), cfg, NOW())  # Haaland at alert time
     assert not r.passed and "market cap $600,000 outside range" in r.reasons
+
+
+def test_holder_count_is_read_when_rugcheck_reports_it():
+    assert parse_report(rug_report()).total_holders == 850
+    report = rug_report()
+    del report["totalHolders"]
+    assert parse_report(report).total_holders is None

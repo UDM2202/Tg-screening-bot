@@ -102,6 +102,7 @@ async def test_full_cycle_alerts_only_the_clean_token(setup):
         assert GOOD in alert["text"] and "$GOOD" in alert["text"]
         assert "TG (1,234)" in alert["text"]
         assert "round trip -5.0%" in alert["text"]
+        assert "Holders: 850" in alert["text"]
         labels = [b["text"] for row in alert["reply_markup"]["inline_keyboard"] for b in row]
         assert {"GMGN", "DexScreener", "RugCheck", "Solscan"} <= set(labels)
 
@@ -118,6 +119,7 @@ async def test_full_cycle_alerts_only_the_clean_token(setup):
         assert "mint_authority" in report
         assert re.search(r"Alerts by insider wallets \[1h\]\n\s+n.*\n0-20 insiders\s+1\s+\+100%", report), report
         assert re.search(r"Alerts by market cap at alert \[1h\]\n\s+n.*\n(.*\n){1}\$100k-\$300k\s+1\s+\+100%", report), report
+        assert re.search(r"Alerts by holder count at alert \[1h\]\n\s+n.*\n(.*\n){2}300-1,000\s+1\s+\+100%", report), report
         assert re.search(r"24h volume vs liquidity \[1h\]\n\s+n.*\n.*\nvol 2-5x liq\s+1\s+\+100%", report), report
         assert re.search(r"price change in the hour before \[1h\]\n\s+n.*\n.*\nup 0-100%\s+1\s+\+100%", report), report
         assert "waiting for their checkpoint: 1h: 0 · 24h: 1 · 7d: 1" in report
@@ -334,6 +336,7 @@ async def test_why_explains_each_state(setup):
         alerted = await s.handle_message("/why", reply_to=101)
         assert "🟢 Alerted" in alerted and "At the alert:" in alerted
         assert "MC $200.0k" in alerted and "Top 10 20.0%" in alerted and "Insider wallets (RugCheck): 0" in alerted
+        assert "Holders: 850" in alerted
         assert "haven't seen" in await s.handle_message("/why 11111111111111111111111111111111")
         assert (await s.handle_message("/why")).startswith("Which coin?")
 

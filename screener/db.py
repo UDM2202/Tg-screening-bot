@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS tokens (
     paper_tp_at  REAL,  -- paper trading: first time price reached the take-profit level
     paper_stop_at REAL, -- paper trading: first time price fell to the stop-loss level
     paper_stop_return REAL, -- return actually seen when the stop-loss was hit
+    paper_hits   TEXT,  -- paper trading: JSON {target multiple: first time price reached it}
     last_reasons TEXT,  -- JSON list: why the latest market check failed (empty = passed)
     kind         TEXT   -- NULL for graduated-coin alerts, 'near_bond' for bonding-curve alerts
 );
@@ -89,7 +90,7 @@ class Database:
         columns = {r["name"] for r in self.conn.execute("PRAGMA table_info(tokens)")}
         wanted = {
             "peak_mcap": "REAL", "paper_tp_at": "REAL", "paper_stop_at": "REAL",
-            "paper_stop_return": "REAL", "last_reasons": "TEXT", "kind": "TEXT",
+            "paper_stop_return": "REAL", "last_reasons": "TEXT", "kind": "TEXT", "paper_hits": "TEXT",
         }
         for column, kind in wanted.items():
             if column not in columns:
@@ -399,7 +400,7 @@ class Database:
     def paper_open(self, since: float) -> list[sqlite3.Row]:
         """Alerts still inside their paper-trading window."""
         return list(self.conn.execute(
-            "SELECT address, kind, ref_price, paper_tp_at, paper_stop_at FROM tokens"
+            "SELECT address, kind, ref_price, paper_tp_at, paper_stop_at, paper_hits FROM tokens"
             " WHERE status = 'alerted' AND decided_at >= ?",
             (since,),
         ))
@@ -417,11 +418,15 @@ class Database:
             )
         self.conn.commit()
 
+    def set_paper_hits(self, address: str, hits: dict[str, float]) -> None:
+        self.conn.execute("UPDATE tokens SET paper_hits = ? WHERE address = ?", (json.dumps(hits), address))
+        self.conn.commit()
+
     def paper_closed(self, checkpoint: str) -> list[sqlite3.Row]:
         """Alerts with a recorded price at the given checkpoint, with their paper marks."""
         return list(self.conn.execute(
             "SELECT t.address, t.decided_at, t.kind, t.ref_price, t.paper_tp_at, t.paper_stop_at,"
-            " t.paper_stop_return, s.price, s.liquidity"
+            " t.paper_stop_return, t.paper_hits, s.price, s.liquidity"
             " FROM tokens t JOIN snapshots s ON s.address = t.address"
             " WHERE t.status = 'alerted' AND s.checkpoint = ? AND s.missed = 0",
             (checkpoint,),

@@ -59,6 +59,7 @@ def format_alert(
         "✅ Mint revoked · ✅ Freeze revoked",
         f"✅ LP locked/burned {pct(rug.lp_locked_pct)}",
         f"Top 10: {pct(rug.top10_pct)} · Max wallet: {pct(rug.max_holder_pct)} · Dev: {pct(rug.dev_pct)}",
+        *([f"Holders: {rug.total_holders:,}"] if rug.total_holders is not None else []),
     ]
     if sell is not None and sell.round_trip_loss_pct is not None:
         lines.append(f"Sell sim: round trip {pct(-sell.round_trip_loss_pct, signed=True)}")
@@ -121,6 +122,7 @@ def format_near_bond_alert(
         "",
         "✅ Mint revoked · ✅ Freeze revoked",
         f"Top 10: {pct(rug.top10_pct)} · Max wallet: {pct(rug.max_holder_pct)} · Dev: {pct(rug.dev_pct)}",
+        *([f"Holders: {rug.total_holders:,}"] if rug.total_holders is not None else []),
     ]
     if goplus is None:
         lines.append("GoPlus: not checked")
