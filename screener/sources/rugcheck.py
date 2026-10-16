@@ -9,6 +9,15 @@ import httpx
 
 from ..http import get_json
 
+# Bundle sign: at least this many top holders whose bags are within BUNDLE_TOLERANCE of each
+# other (largest / smallest). Real buyers spend random amounts; one operator splitting a buy
+# across fresh wallets tends to leave identical bags. A warning only, while /stats shows
+# whether flagged coins actually do worse.
+BUNDLE_MIN_WALLETS = 6
+BUNDLE_TOLERANCE = 0.05
+# Ignore dust: tiny bags are naturally close together at the bottom of the list.
+BUNDLE_MIN_PCT = 0.1
+
 # RugCheck risk names that point at the creator's past launches.
 CREATOR_HISTORY_KEYWORDS = ("creator history", "rugged", "previous rug")
 
@@ -29,6 +38,8 @@ class RugFacts:
     insiders_detected: int = 0
     score_normalised: float | None = None
     total_holders: int | None = None  # every wallet holding the token, not just the top list
+    bundle_wallets: int = 0  # size of the largest group of near-identical top-holder bags
+    bundle_bag_pct: float | None = None  # typical bag size in that group
 
 
 def _num(value: Any) -> float:
@@ -36,6 +47,21 @@ def _num(value: Any) -> float:
         return float(value)
     except (TypeError, ValueError):
         return 0.0
+
+
+def _identical_bags(pcts: list[float]) -> tuple[int, float | None]:
+    """Largest group of bags within BUNDLE_TOLERANCE of each other: (count, median bag %)."""
+    bags = sorted(p for p in pcts if p >= BUNDLE_MIN_PCT)
+    best, best_group = 0, []
+    start = 0
+    for end, bag in enumerate(bags):
+        while bag > bags[start] * (1 + BUNDLE_TOLERANCE):
+            start += 1
+        if end - start + 1 > best:
+            best, best_group = end - start + 1, bags[start:end + 1]
+    if best < BUNDLE_MIN_WALLETS:
+        return best, None
+    return best, best_group[len(best_group) // 2]
 
 
 def _holder_count(report: dict[str, Any]) -> int | None:
@@ -86,6 +112,7 @@ def parse_report(report: dict[str, Any], extra_pool_accounts: set[str] | None = 
         if h.get("address") not in pools and h.get("owner") not in pools
     ]
     pcts = sorted((_num(h.get("pct")) for h in holders), reverse=True)
+    bundle_wallets, bundle_bag = _identical_bags(pcts)
 
     dev_pct = sum(_num(h.get("pct")) for h in holders if creator and h.get("owner") == creator)
     supply = _num(token.get("supply"))
@@ -117,6 +144,8 @@ def parse_report(report: dict[str, Any], extra_pool_accounts: set[str] | None = 
         insiders_detected=int(_num(report.get("graphInsidersDetected"))),
         score_normalised=report.get("score_normalised"),
         total_holders=_holder_count(report),
+        bundle_wallets=bundle_wallets,
+        bundle_bag_pct=bundle_bag,
     )
 
 

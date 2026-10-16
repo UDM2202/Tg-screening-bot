@@ -46,7 +46,9 @@ def rug_report(*, mint_auth=None, freeze_auth=None, lp_locked=100.0, holders=Non
         holders = [
             {"address": POOL, "owner": "pool-owner", "pct": 25.0},  # pool, must be ignored
             {"address": "h1", "owner": CREATOR, "pct": 1.0},
-            *({"address": f"h{i}", "owner": f"o{i}", "pct": 2.0} for i in range(2, 12)),
+            # Ten more holders with varied bags (20% together), as real buyers have.
+            *({"address": f"h{i}", "owner": f"o{i}", "pct": pct}
+              for i, pct in zip(range(2, 12), (3.0, 2.6, 2.3, 2.1, 2.0, 1.9, 1.8, 1.6, 1.5, 1.2))),
         ]
     return {
         "mint": GOOD,
@@ -109,7 +111,16 @@ def curve_rug_report() -> dict:
     report["markets"] = []
     report["topHolders"] = [
         {"address": CURVE_TOKENS_ACCOUNT, "owner": CURVE_ACCOUNT, "pct": 35.0},
-        *({"address": f"c{i}", "owner": f"co{i}", "pct": 1.5} for i in range(10)),
+        *({"address": f"c{i}", "owner": f"co{i}", "pct": 1.5 - i / 10} for i in range(10)),
     ]
     report["risks"] = [{"name": "Large Amount of LP Unlocked", "level": "danger"}]
     return report
+
+
+def bundled_holders() -> list[dict]:
+    """FEDLIENS-style top holders: eight wallets with bags of 0.41-0.45%, among normal ones."""
+    bags = (1.42, 1.05, 1.04, 0.85, 0.77, 0.66, 0.65, 0.58, 0.51,
+            0.45, 0.44, 0.44, 0.43, 0.42, 0.42, 0.42, 0.41, 0.38, 0.2)
+    return [{"address": POOL, "owner": "pool-owner", "pct": 30.0}] + [
+        {"address": f"b{i}", "owner": f"bo{i}", "pct": pct} for i, pct in enumerate(bags)
+    ]

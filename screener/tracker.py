@@ -13,6 +13,7 @@ from html import escape
 from .config import TrackerConfig
 from .db import Database
 from .sources.dexscreener import DexScreener
+from .sources.rugcheck import BUNDLE_MIN_WALLETS
 
 log = logging.getLogger(__name__)
 
@@ -137,6 +138,13 @@ def _holders_bucket(row) -> str | None:
     return "300-1,000" if holders < 1000 else "1,000+"
 
 
+def _bundle_bucket(row) -> str | None:
+    wallets = json.loads(row["details"] or "{}").get("bundle_wallets")
+    if wallets is None:
+        return None  # only recorded for alerts since this breakdown was added
+    return "possible bundle" if wallets >= BUNDLE_MIN_WALLETS else "no bundle sign"
+
+
 def _kind_bucket(row) -> str:
     return "near bond" if row["kind"] == "near_bond" else "graduated"
 
@@ -151,6 +159,7 @@ ALERT_BREAKDOWNS = [
      _volume_bucket),
     ("Alerts by holder count at alert",
      ["under 100", "100-300", "300-1,000", "1,000+"], _holders_bucket),
+    ("Alerts by bundle sign (identical bags)", ["no bundle sign", "possible bundle"], _bundle_bucket),
     ("Alerts by insider wallets", [f"0-{INSIDER_SPLIT} insiders", f"{INSIDER_SPLIT + 1}+ insiders"],
      _insider_bucket),
 ]

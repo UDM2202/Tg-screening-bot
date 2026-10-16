@@ -152,4 +152,9 @@ def tier1(
         r.reject("insiders", f"{rug.insiders_detected} insider wallets detected")
     elif rug.insiders_detected:
         r.warnings.append(f"{rug.insiders_detected} insider wallets detected")
+    if rug.bundle_bag_pct is not None:
+        r.warnings.append(
+            f"possible bundle: {rug.bundle_wallets} top holders with near-identical bags "
+            f"(~{rug.bundle_bag_pct:.2f}% each)"
+        )
     return r

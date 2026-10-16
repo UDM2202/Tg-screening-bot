@@ -7,7 +7,7 @@ from screener.sources.goplus import parse_security
 from screener.sources.jupiter import SellSim
 from screener.sources.rugcheck import parse_report
 
-from .fixtures import GOOD, goplus_result, pair, rug_report
+from .fixtures import GOOD, bundled_holders, goplus_result, pair, rug_report
 
 NOW = lambda: datetime.now(timezone.utc)  # noqa: E731
 
@@ -53,7 +53,7 @@ def test_tier2_socials_optional():
 def test_rugcheck_parsing_ignores_pool_accounts():
     facts = parse_report(rug_report())
     assert facts.top10_pct == 20.0  # ten 2% wallets; the 25% pool account is skipped
-    assert facts.max_holder_pct == 2.0
+    assert facts.max_holder_pct == 3.0
     assert facts.dev_pct == 1.0
     assert facts.lp_locked_pct == 100.0
 
@@ -165,3 +165,18 @@ def test_holder_count_is_read_when_rugcheck_reports_it():
     report = rug_report()
     del report["totalHolders"]
     assert parse_report(report).total_holders is None
+
+
+def test_identical_bags_flag_a_possible_bundle():
+    facts = parse_report(rug_report(holders=bundled_holders()))
+    # 0.42-0.44% is the largest group within 5%: 0.42, 0.42, 0.42, 0.43, 0.44, 0.44
+    assert facts.bundle_wallets == 6 and facts.bundle_bag_pct == 0.43
+    result = tier1(facts, None, SellSim(True, 4.0), Tier1Config())
+    assert result.passed  # a warning, not a reject
+    assert any(w.startswith("possible bundle: 6 top holders") for w in result.warnings)
+
+
+def test_varied_bags_are_not_a_bundle():
+    facts = parse_report(rug_report())
+    assert facts.bundle_bag_pct is None
+    assert not any("bundle" in w for w in tier1(facts, None, SellSim(True, 4.0), Tier1Config()).warnings)

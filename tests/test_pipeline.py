@@ -120,6 +120,7 @@ async def test_full_cycle_alerts_only_the_clean_token(setup):
         assert re.search(r"Alerts by insider wallets \[1h\]\n\s+n.*\n0-20 insiders\s+1\s+\+100%", report), report
         assert re.search(r"Alerts by market cap at alert \[1h\]\n\s+n.*\n(.*\n){1}\$100k-\$300k\s+1\s+\+100%", report), report
         assert re.search(r"Alerts by holder count at alert \[1h\]\n\s+n.*\n(.*\n){2}300-1,000\s+1\s+\+100%", report), report
+        assert re.search(r"Alerts by bundle sign \(identical bags\) \[1h\]\n\s+n.*\nno bundle sign\s+1\s+\+100%", report), report
         assert re.search(r"24h volume vs liquidity \[1h\]\n\s+n.*\n.*\nvol 2-5x liq\s+1\s+\+100%", report), report
         assert re.search(r"price change in the hour before \[1h\]\n\s+n.*\n.*\nup 0-100%\s+1\s+\+100%", report), report
         assert "waiting for their checkpoint: 1h: 0 · 24h: 1 · 7d: 1" in report
