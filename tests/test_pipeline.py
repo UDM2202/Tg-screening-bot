@@ -371,7 +371,7 @@ async def test_near_bond_scan_alerts_once_and_tracks_type(setup, monkeypatch):
         assert len(alerts) == 1
         text = alerts[0]["text"]
         assert text.startswith("⚡ <b>NEAR BOND</b> · 90% bonded")
-        assert "MC $65.0k" in text and "can't be pulled" in text and "unable to sell" in text
+        assert "MC $35.0k" in text and "can't be pulled" in text and "unable to sell" in text
         labels = [b["text"] for row in alerts[0]["reply_markup"]["inline_keyboard"] for b in row]
         assert {"pump.fun", "GMGN"} <= set(labels)
         assert db.get_token(CURVE)["kind"] == "near_bond" and db.status(CURVE) == "alerted"
@@ -403,6 +403,15 @@ async def test_near_bond_scan_pages_past_coins_above_the_range(setup):
         await s.scan_near_bond()
         assert apis.pumpfun_requests == 3  # stops once a page goes below the minimum market cap
         assert db.status(CURVE) == "alerted"  # on page 2, below the big coins
+        assert s.pumpfun.start_offset == 2  # the all-big first page is skipped from now on
+        assert "list position 2" in await s.handle_message("/nearbond")
+
+        await s.scan_near_bond()
+        assert apis.pumpfun_requests == 5  # starts at the window: two pages, not three
+
+        apis.pumpfun_coins = [pumpfun_coin("Low1111111111111111111111111111111111111pump", mcap=30_000)] * 4
+        await s.scan_near_bond()
+        assert s.pumpfun.start_offset == 0  # the window now starts higher up the list: step back
 
 
 async def test_near_bond_coin_missing_from_dexscreener_is_not_counted_dead(setup):

@@ -101,10 +101,12 @@ class NearBondConfig:
     enabled: bool = True
     api: str = "https://frontend-api-v3.pump.fun"
     poll_seconds: int = 60
-    # pump.fun's not-yet-bonded coins are fetched largest first, fetch_limit per page, paging
-    # down until market caps drop below min_market_cap_usd (at most fetch_pages pages).
+    # pump.fun lists not-yet-bonded coins by market cap. The scan reads the part of that list
+    # from scan_from_market_cap_usd down to min_market_cap_usd, fetch_limit coins per page and
+    # at most fetch_pages pages a scan. Standard coins near bonding are worth about $20-45k.
     fetch_limit: int = 50
     fetch_pages: int = 4
+    scan_from_market_cap_usd: float = 60_000
     min_progress_pct: float = 85
     max_progress_pct: float = 99
     min_age_minutes: float = 10

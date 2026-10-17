@@ -34,7 +34,7 @@ def test_parse_coin_skips_graduated_coins():
     coin = parse_coin(pumpfun_coin())
     assert coin.symbol == "CURVE" and round(coin.progress_pct) == 90
     assert coin.curve_accounts == {CURVE_ACCOUNT, CURVE_TOKENS_ACCOUNT}
-    assert abs(coin.price_usd - 65_000 / 1e9) < 1e-12
+    assert abs(coin.price_usd - 35_000 / 1e9) < 1e-12
     assert parse_coin(pumpfun_coin(complete=True)) is None
 
 

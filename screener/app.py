@@ -26,7 +26,7 @@ from .sources.dexscreener import DexScreener, Market
 from .sources.goplus import GoPlus
 from .sources.helius import HeliusPools
 from .sources.jupiter import Jupiter
-from .sources.pumpfun import CurveCoin, PumpFun, parse_coin
+from .sources.pumpfun import CurveCoin, PumpFun, bonding_progress, parse_coin
 from .sources.pumpportal import stream_migrations
 from .sources.rugcheck import RugCheck
 from .telegram import Telegram
@@ -256,9 +256,12 @@ class Screener:
         now = datetime.now(timezone.utc)
         # Skip the coins above the alert range: they're the top of pump.fun's list but never alert.
         in_range = [c for c in raw if (c.get("usd_market_cap") or 0) <= self.cfg.near_bond.max_market_cap_usd]
-        shown = (in_range or raw)[:limit]
-        lines = [f"<b>Near-bond scan: {len(raw)} coins, {len(in_range)} at or under the max market cap. "
-                 f"First {len(shown)}:</b>"]
+        # Most bonded first: the coins closest to qualifying.
+        shown = sorted(in_range or raw, key=lambda c: bonding_progress(c) or 0, reverse=True)[:limit]
+        caps = [c.get("usd_market_cap") for c in raw if isinstance(c.get("usd_market_cap"), (int, float))]
+        span = f"market caps {usd(max(caps))} down to {usd(min(caps))}, " if caps else ""
+        lines = [f"<b>Near-bond scan: {len(raw)} coins ({span}list position {self.pumpfun.start_offset}). "
+                 f"{len(in_range)} at or under the max market cap. Most bonded {len(shown)}:</b>"]
         for c in shown:
             coin = parse_coin(c)
             if coin is None:
@@ -277,7 +280,9 @@ class Screener:
     async def scan_near_bond(self) -> None:
         nb = self.cfg.near_bond
         try:
-            coins = await self.pumpfun.top_unbonded(nb.fetch_limit, nb.fetch_pages, nb.min_market_cap_usd)
+            coins = await self.pumpfun.unbonded_in_window(
+                nb.fetch_limit, nb.fetch_pages, nb.scan_from_market_cap_usd, nb.min_market_cap_usd
+            )
         except ApiError as exc:
             self.db.set_meta("near_bond_error", str(exc)[:200])
             log.warning("Near-bond scan failed: %s", exc)

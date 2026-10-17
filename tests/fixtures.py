@@ -86,7 +86,7 @@ CURVE_ACCOUNT = "BondingCurve11111111111111111111111111111111"
 CURVE_TOKENS_ACCOUNT = "CurveTokens111111111111111111111111111111111"
 
 
-def pumpfun_coin(mint: str = CURVE, *, progress: float = 90.0, mcap: float = 65_000, age_min: float = 30,
+def pumpfun_coin(mint: str = CURVE, *, progress: float = 90.0, mcap: float = 35_000, age_min: float = 30,
                  complete: bool = False) -> dict:
     tokens_left = 793_100_000 * (1 - progress / 100)
     return {

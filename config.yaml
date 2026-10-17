@@ -120,10 +120,13 @@ near_bond:
   # pump.fun's public web API (unofficial; may change without notice).
   api: https://frontend-api-v3.pump.fun
   poll_seconds: 60
-  # Coins are fetched largest first, 50 per page, paging down until market caps fall below
-  # min_market_cap_usd (at most fetch_pages pages, so at most 4 requests a minute).
+  # pump.fun lists coins by market cap, and its top is full of coins that can't alert (big
+  # curves worth $300k+ at half bonded). The scan reads only the part of the list from
+  # scan_from_market_cap_usd down to min_market_cap_usd, 50 coins per page, at most
+  # fetch_pages pages a minute. Standard coins near bonding are worth about $20-45k.
   fetch_limit: 50
   fetch_pages: 4
+  scan_from_market_cap_usd: 60000
   # Alert when this much of the curve is sold (100 = bonded).
   min_progress_pct: 85
   max_progress_pct: 99

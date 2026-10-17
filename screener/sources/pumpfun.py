@@ -119,35 +119,52 @@ class PumpFun:
         self.client = client
         self.base = base_url.rstrip("/")
         self.last_raw: list[dict[str, Any]] = []  # the last response, for /nearbond
+        self.start_offset = 0  # where in pump.fun's list the market-cap window currently starts
 
-    async def top_unbonded(self, page_size: int, max_pages: int, min_usd_market_cap: float) -> list[CurveCoin]:
-        """Coins still on the curve, largest market cap first, down to min_usd_market_cap.
+    async def _page(self, offset: int, limit: int) -> list[dict[str, Any]]:
+        data = await get_json(
+            self.client,
+            f"{self.base}/coins",
+            params={
+                "offset": offset,
+                "limit": limit,
+                "sort": "market_cap",
+                "order": "DESC",
+                "includeNsfw": "false",
+                "complete": "false",
+            },
+            headers=HEADERS,
+        )
+        if isinstance(data, dict):
+            data = data.get("coins") or data.get("data") or []
+        if not isinstance(data, list):
+            raise ApiError(f"pump.fun: unexpected response {str(data)[:200]}")
+        return [raw for raw in data if isinstance(raw, dict)]
 
-        The top of the list is mostly coins far above the alert range (big curves, and coins stuck
-        at 100% waiting to migrate), so it pages down until market caps fall below the range.
+    async def unbonded_in_window(
+        self, page_size: int, max_pages: int, top_usd: float, bottom_usd: float
+    ) -> list[CurveCoin]:
+        """Coins still on the curve with market caps from about top_usd down to bottom_usd.
+
+        pump.fun's list can only be sorted by market cap, and its top is crowded with coins that
+        can't alert (big curves worth $300k+ at half bonded, coins stuck at 100%). Standard coins
+        close to bonding sit far lower, so the scan remembers where the window starts in the list
+        and moves that start as coins rise and fall, instead of paging from the top every time.
         """
         self.last_raw = []
+        offset = self.start_offset
         for page in range(max_pages):
-            data = await get_json(
-                self.client,
-                f"{self.base}/coins",
-                params={
-                    "offset": page * page_size,
-                    "limit": page_size,
-                    "sort": "market_cap",
-                    "order": "DESC",
-                    "includeNsfw": "false",
-                    "complete": "false",
-                },
-                headers=HEADERS,
-            )
-            if isinstance(data, dict):
-                data = data.get("coins") or data.get("data") or []
-            if not isinstance(data, list):
-                raise ApiError(f"pump.fun: unexpected response {str(data)[:200]}")
-            rows = [raw for raw in data if isinstance(raw, dict)]
-            self.last_raw += rows
+            rows = await self._page(offset, page_size)
             caps = [m for m in (_num(r.get("usd_market_cap")) for r in rows) if m is not None]
-            if len(rows) < page_size or not caps or min(caps) < min_usd_market_cap:
+            if page == 0 and offset > 0 and caps and max(caps) < top_usd:
+                # Coins moved and the window now starts higher up: step back for the next scan.
+                self.start_offset = max(0, offset - page_size)
+            if caps and min(caps) > top_usd:
+                # Whole page above the window: skip it from now on.
+                self.start_offset = offset + page_size
+            else:
+                self.last_raw += rows
+            if len(rows) < page_size or not caps or min(caps) < bottom_usd:
                 break
+            offset += page_size
         return [c for c in (parse_coin(raw) for raw in self.last_raw) if c]
