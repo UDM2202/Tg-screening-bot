@@ -251,6 +251,12 @@ class Screener:
     def near_bond_debug(self, limit: int = 8) -> str:
         """The raw pump.fun fields behind the near-bond numbers, to check the bonded % maths."""
         raw = self.pumpfun.last_raw
+        error = self.db.get_meta("near_bond_error")
+        if error:
+            return f"⚡ The near-bond scan is failing: {escape(error)}" + (
+                "\n\nThe phone can't look up pump.fun's address. If other sites load, pump.fun may be "
+                "blocked on this network or have moved its API; try another network or Private DNS."
+                if "hostname" in error.lower() or "name resolution" in error.lower() else "")
         if not raw:
             return "No near-bond scan data yet."
         now = datetime.now(timezone.utc)

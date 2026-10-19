@@ -391,6 +391,7 @@ async def test_near_bond_scan_alerts_once_and_tracks_type(setup, monkeypatch):
         monkeypatch.setattr("screener.http.asyncio.sleep", lambda *_: real_sleep(0))
         await s.scan_near_bond()
         assert "⚡ Near-bond scan failing" in s.handle_command("/status")
+        assert "The near-bond scan is failing" in await s.handle_message("/nearbond")
 
 
 async def test_near_bond_scan_pages_past_coins_above_the_range(setup):
