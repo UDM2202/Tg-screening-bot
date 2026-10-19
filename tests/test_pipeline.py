@@ -162,6 +162,26 @@ async def test_api_outage_leaves_token_watching(setup, monkeypatch):
         assert apis.sent == []
 
 
+async def test_token_rugcheck_cannot_report_on_is_rejected_after_five_tries(setup):
+    apis, cfg, db = setup
+
+    def no_report(request):
+        if "rugcheck" in str(request.url):
+            return httpx.Response(400, json={"error": "unable to generate report"})
+        return apis(request)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(no_report)) as client:
+        s = Screener(cfg, client, db)
+        for _ in range(4):
+            await s.run_cycle()
+        assert db.status(GOOD) == "watching"  # still retried
+        await s.run_cycle()
+        assert db.status(GOOD) == "rejected"
+        assert "no_rug_report" in db.get_token(GOOD)["reject_codes"]
+        assert apis.sent == []
+        assert "RugCheck can&#x27;t generate a report" in await s.handle_message(f"/why {GOOD}")
+
+
 async def test_late_checkpoints_are_marked_missed(setup):
     apis, cfg, db = setup
     async with httpx.AsyncClient(transport=httpx.MockTransport(apis)) as client:

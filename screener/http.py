@@ -19,6 +19,14 @@ class NotFound(ApiError):
     """The source answered but has no data for this request."""
 
 
+class ClientError(ApiError):
+    """The source refused the request (HTTP 4xx other than 404 and 429)."""
+
+    def __init__(self, message: str, status: int):
+        super().__init__(message)
+        self.status = status
+
+
 async def get_json(
     client: httpx.AsyncClient,
     url: str,
@@ -44,7 +52,7 @@ async def get_json(
                 if retry_after.isdigit():
                     delay = max(delay, float(retry_after))
             elif resp.status_code >= 400:
-                raise ApiError(f"{url}: HTTP {resp.status_code} {resp.text[:200]}")
+                raise ClientError(f"{url}: HTTP {resp.status_code} {resp.text[:200]}", resp.status_code)
             else:
                 return resp.json()
         log.debug("Retrying %s in %.0fs", url, delay)

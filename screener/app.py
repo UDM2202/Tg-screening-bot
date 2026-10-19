@@ -21,7 +21,7 @@ from .alerts import age_text, format_alert, format_near_bond_alert, usd
 from .config import Config
 from .db import Database
 from .filters import near_bond_reasons, tier1, tier2
-from .http import ApiError
+from .http import ApiError, ClientError
 from .sources.dexscreener import DexScreener, Market
 from .sources.goplus import GoPlus
 from .sources.helius import HeliusPools
@@ -34,6 +34,9 @@ from .tracker import build_report, take_snapshots
 from .watch import Watch, evaluate
 
 log = logging.getLogger(__name__)
+
+# Rejected after this many "unable to generate report" answers from RugCheck in a row.
+MAX_REPORT_FAILURES = 5
 
 WEEK = 7 * 86400
 SOLANA_ADDRESS = re.compile(r"^[1-9A-HJ-NP-Za-km-z]{32,44}$")
@@ -81,6 +84,9 @@ class Screener:
         # Profile links (socials) seen at discovery, keyed by token address.
         self.profile_links: dict[str, list[dict]] = {}
         self.rug_check_slots = asyncio.Semaphore(3)
+        # RugCheck answers HTTP 400 "unable to generate report" for some tokens, every time.
+        # Count those per token so they're rejected instead of retried forever.
+        self.report_failures: dict[str, int] = {}
         self.pumpfun = PumpFun(client, cfg.near_bond.api)
         # Highest market cap seen per bonding-curve coin, for the drop-from-peak rule.
         self.curve_peaks: dict[str, float] = {}
@@ -149,10 +155,30 @@ class Screener:
         async with self.rug_check_slots:
             try:
                 await self._check_token(market)
+            except ClientError as exc:
+                if not self._give_up_on_report(market.address, exc, price=market.price_usd,
+                                               mcap=market.market_cap_usd, liquidity=market.liquidity_usd):
+                    log.warning("Rug checks unavailable for %s, retrying next cycle: %s", market.symbol, exc)
             except ApiError as exc:
                 log.warning("Rug checks unavailable for %s, retrying next cycle: %s", market.symbol, exc)
             except Exception:
                 log.exception("Unexpected error checking %s", market.address)
+
+    def _give_up_on_report(self, address: str, exc: ClientError, **decision) -> bool:
+        """After MAX_REPORT_FAILURES refusals from RugCheck, reject the token: it can't be checked."""
+        if "rugcheck" not in str(exc) or exc.status != 400:
+            return False
+        failures = self.report_failures.get(address, 0) + 1
+        self.report_failures[address] = failures
+        if failures < MAX_REPORT_FAILURES:
+            return False
+        self.report_failures.pop(address, None)
+        if self.db.get_token(address) is None:
+            self.db.add_token(address, "pumpfun-curve")
+        reason = f"RugCheck can't generate a report ({failures} tries), so it can't be checked"
+        log.info("Rejected %s: %s", address, reason)
+        self.db.decide(address, "rejected", reject_codes=["no_rug_report"], details={"reasons": [reason]}, **decision)
+        return True
 
     async def _check_token(self, market: Market) -> None:
         t1 = self.cfg.tier1
@@ -314,6 +340,10 @@ class Screener:
             async with self.rug_check_slots:
                 try:
                     await self._check_curve_coin(coin)
+                except ClientError as exc:
+                    if not self._give_up_on_report(coin.mint, exc, price=coin.price_usd,
+                                                   mcap=coin.market_cap_usd, liquidity=None, kind="near_bond"):
+                        log.warning("Rug checks unavailable for %s, retrying next scan: %s", coin.symbol, exc)
                 except ApiError as exc:
                     log.warning("Rug checks unavailable for %s, retrying next scan: %s", coin.symbol, exc)
                 except Exception:

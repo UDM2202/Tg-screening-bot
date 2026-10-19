@@ -21,7 +21,18 @@ TOTAL_SUPPLY_TOKENS = 1_000_000_000
 CURVE_TOKENS = 793_100_000
 # Virtual token reserves start at 1,073M (the curve tokens plus a 279.9M offset).
 VIRTUAL_TOKEN_OFFSET = 279_900_000
-HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; tg-screening-bot)", "Accept": "application/json"}
+# pump.fun's API sits behind bot protection that refuses requests that don't look like they
+# come from its own website.
+HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/124.0.0.0 Mobile Safari/537.36"
+    ),
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Origin": "https://pump.fun",
+    "Referer": "https://pump.fun/",
+}
 
 
 @dataclass
