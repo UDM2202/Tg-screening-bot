@@ -138,6 +138,18 @@ near_bond:
   # Skip coins this far below the highest market cap the bot has seen for them.
   max_drop_from_peak_pct: 25
 
+# ↩️ Pullback alerts: coins that ran, cooled off, and are bouncing off a higher low, for an
+# entry on the second leg instead of at the top of the first spike. They still pass every
+# other market rule and all the rug checks. /stats and /paper show them separately.
+pullback:
+  enabled: true
+  min_run_x: 3          # peak at least 3x the first market cap the bot saw
+  min_drop_pct: 30      # pulled back at least 30% from the peak...
+  max_drop_pct: 60      # ...but not more than 60% (deeper is usually a dump, not a pullback)
+  min_bounce_pct: 10    # now at least 10% above the low
+  min_minutes_since_low: 3
+  min_below_peak_pct: 15  # still at least 15% under the peak
+
 apis:
   dexscreener: https://api.dexscreener.com
   rugcheck: https://api.rugcheck.xyz

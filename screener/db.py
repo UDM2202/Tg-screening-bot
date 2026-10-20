@@ -29,7 +29,10 @@ CREATE TABLE IF NOT EXISTS tokens (
     paper_stop_return REAL, -- return actually seen when the stop-loss was hit
     paper_hits   TEXT,  -- paper trading: JSON {target multiple: first time price reached it}
     last_reasons TEXT,  -- JSON list: why the latest market check failed (empty = passed)
-    kind         TEXT   -- NULL for graduated-coin alerts, 'near_bond' for bonding-curve alerts
+    kind         TEXT,  -- NULL for graduated-coin alerts, 'near_bond' or 'pullback' otherwise
+    first_mcap   REAL,  -- first market cap seen
+    trough_mcap  REAL,  -- lowest market cap since the last new peak
+    trough_at    REAL   -- when that low was seen
 );
 CREATE INDEX IF NOT EXISTS tokens_status ON tokens(status, first_seen);
 
@@ -91,6 +94,7 @@ class Database:
         wanted = {
             "peak_mcap": "REAL", "paper_tp_at": "REAL", "paper_stop_at": "REAL",
             "paper_stop_return": "REAL", "last_reasons": "TEXT", "kind": "TEXT", "paper_hits": "TEXT",
+            "first_mcap": "REAL", "trough_mcap": "REAL", "trough_at": "REAL",
         }
         for column, kind in wanted.items():
             if column not in columns:
@@ -128,14 +132,33 @@ class Database:
         self, address: str, symbol: str | None = None, name: str | None = None, mcap: float | None = None
     ) -> float | None:
         """Record a check of a watched token and return the highest market cap seen so far."""
+        now = time.time()
+        if mcap is not None:
+            # SET expressions all see the row as it was: a new peak clears the low since the
+            # last peak; otherwise a lower market cap becomes the new low.
+            self.conn.execute(
+                "UPDATE tokens SET first_mcap = COALESCE(first_mcap, ?),"
+                " trough_mcap = CASE WHEN ? >= COALESCE(peak_mcap, 0) THEN NULL"
+                "   WHEN trough_mcap IS NULL OR ? < trough_mcap THEN ? ELSE trough_mcap END,"
+                " trough_at = CASE WHEN ? >= COALESCE(peak_mcap, 0) THEN NULL"
+                "   WHEN trough_mcap IS NULL OR ? < trough_mcap THEN ? ELSE trough_at END"
+                " WHERE address = ?",
+                (mcap, mcap, mcap, mcap, mcap, mcap, now, address),
+            )
         self.conn.execute(
             "UPDATE tokens SET last_checked = ?, symbol = COALESCE(?, symbol), name = COALESCE(?, name),"
             " peak_mcap = MAX(COALESCE(peak_mcap, 0), COALESCE(?, 0)) WHERE address = ?",
-            (time.time(), symbol, name, mcap, address),
+            (now, symbol, name, mcap, address),
         )
         self.conn.commit()
         row = self.conn.execute("SELECT peak_mcap FROM tokens WHERE address = ?", (address,)).fetchone()
         return row["peak_mcap"] if row and row["peak_mcap"] else None
+
+    def price_history(self, address: str) -> sqlite3.Row | None:
+        """First, peak and lowest-since-peak market caps, for the pullback rule."""
+        return self.conn.execute(
+            "SELECT first_mcap, peak_mcap, trough_mcap, trough_at FROM tokens WHERE address = ?", (address,)
+        ).fetchone()
 
     def set_last_reasons(self, address: str, reasons: list[str]) -> None:
         self.conn.execute(

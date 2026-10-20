@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 
-from screener.config import Tier1Config, Tier2Config
-from screener.filters import tier1, tier2
+from screener.config import PullbackConfig, Tier1Config, Tier2Config
+from screener.filters import pullback_reasons, tier1, tier2
 from screener.sources.dexscreener import parse_market
 from screener.sources.goplus import parse_security
 from screener.sources.jupiter import SellSim
@@ -180,3 +180,23 @@ def test_varied_bags_are_not_a_bundle():
     facts = parse_report(rug_report())
     assert facts.bundle_bag_pct is None
     assert not any("bundle" in w for w in tier1(facts, None, SellSim(True, 4.0), Tier1Config()).warnings)
+
+
+def test_pullback_rule():
+    cfg = PullbackConfig()
+    now = 10_000.0
+    history = {"first_mcap": 50_000, "peak_mcap": 200_000, "trough_mcap": 110_000, "trough_at": now - 600}
+
+    def bouncing(mcap, buys=30, sells=10, m5=5.0):
+        m = market(mcap=mcap)
+        m.buys_m5, m.sells_m5, m.price_change_m5 = buys, sells, m5
+        return m
+
+    assert pullback_reasons(bouncing(130_000), cfg, history, now) == []
+    assert "only 5% off the low" in pullback_reasons(bouncing(115_500), cfg, history, now)
+    assert "already back near the peak" in pullback_reasons(bouncing(190_000), cfg, history, now)
+    assert "more sells than buys in the last 5 minutes" in pullback_reasons(bouncing(130_000, 5, 20), cfg, history, now)
+    assert "the low is too recent" in pullback_reasons(bouncing(130_000), cfg, {**history, "trough_at": now - 60}, now)
+    assert pullback_reasons(bouncing(130_000), cfg, {**history, "first_mcap": 100_000}, now) == ["first run only 2.0x"]
+    deep = {**history, "trough_mcap": 50_000}  # -75%: a dump, not a pullback
+    assert any("outside 30-60%" in r for r in pullback_reasons(bouncing(70_000), cfg, deep, now))

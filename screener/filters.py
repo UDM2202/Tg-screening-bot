@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from .config import Tier1Config, Tier2Config
+from .config import PullbackConfig, Tier1Config, Tier2Config
 from .sources.dexscreener import Market
 from .sources.goplus import GoPlusFacts
 from .sources.jupiter import SellSim
@@ -58,6 +58,32 @@ def tier2(market: Market, cfg: Tier2Config, now: datetime, peak_mcap: float | No
     if cfg.require_any_social and not (market.websites or market.socials):
         reasons.append("no socials")
     return Tier2Result(not reasons, False, reasons)
+
+
+def pullback_reasons(market: Market, cfg: PullbackConfig, history, now_ts: float) -> list[str]:
+    """Is this a pullback worth an alert? history: first/peak/trough market caps. Empty = yes."""
+    mcap = market.market_cap_usd
+    first, peak = history["first_mcap"], history["peak_mcap"]
+    low, low_at = history["trough_mcap"], history["trough_at"]
+    if not (mcap and first and peak and low and low_at):
+        return ["no pullback seen yet"]
+    reasons = []
+    if peak < first * cfg.min_run_x:
+        reasons.append(f"first run only {peak / first:.1f}x")
+    drop = (1 - low / peak) * 100
+    if not cfg.min_drop_pct <= drop <= cfg.max_drop_pct:
+        reasons.append(f"pullback {drop:.0f}% from the peak, outside {cfg.min_drop_pct:g}-{cfg.max_drop_pct:g}%")
+    if mcap < low * (1 + cfg.min_bounce_pct / 100):
+        reasons.append(f"only {(mcap / low - 1) * 100:.0f}% off the low")
+    if (now_ts - low_at) / 60 < cfg.min_minutes_since_low:
+        reasons.append("the low is too recent")
+    if mcap > peak * (1 - cfg.min_below_peak_pct / 100):
+        reasons.append("already back near the peak")
+    if market.buys_m5 is not None and market.sells_m5 is not None and market.buys_m5 <= market.sells_m5:
+        reasons.append("more sells than buys in the last 5 minutes")
+    if market.price_change_m5 is not None and market.price_change_m5 <= 0:
+        reasons.append("not rising in the last 5 minutes")
+    return reasons
 
 
 def near_bond_reasons(coin, cfg, now: datetime, peak_mcap: float | None) -> list[str]:

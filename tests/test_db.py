@@ -48,3 +48,14 @@ def test_old_database_gets_peak_column(tmp_path):
     db = Database(str(path))
     assert db.touch("a", mcap=50_000) == 50_000
     assert db.touch("a", mcap=20_000) == 50_000
+
+
+def test_touch_tracks_first_peak_and_low_since_peak():
+    db = Database(":memory:")
+    db.add_token("t", "test")
+    for mcap in (50_000, 200_000, 120_000, 100_000, 130_000):
+        db.touch("t", mcap=mcap)
+    h = db.price_history("t")
+    assert (h["first_mcap"], h["peak_mcap"], h["trough_mcap"]) == (50_000, 200_000, 100_000)
+    db.touch("t", mcap=250_000)  # a new peak clears the low
+    assert db.price_history("t")["trough_mcap"] is None

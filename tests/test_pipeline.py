@@ -182,6 +182,25 @@ async def test_token_rugcheck_cannot_report_on_is_rejected_after_five_tries(setu
         assert "RugCheck can&#x27;t generate a report" in await s.handle_message(f"/why {GOOD}")
 
 
+async def test_pullback_alert_after_a_run_and_a_higher_low(setup):
+    apis, cfg, db = setup
+    async with httpx.AsyncClient(transport=httpx.MockTransport(apis)) as client:
+        s = Screener(cfg, client, db)
+        apis.liq = 5_000  # too thin to alert while it runs
+        for price in (0.00006, 0.00025, 0.000125):  # $60k -> $250k peak (4x) -> $125k low (-50%)
+            apis.price = price
+            await s.run_cycle()
+        assert db.status(GOOD) == "watching"
+        # Ten minutes later it's bouncing: $150k, 20% off the low, buyers back.
+        db.conn.execute("UPDATE tokens SET trough_at = trough_at - 600 WHERE address = ?", (GOOD,))
+        apis.price, apis.liq, apis.txns_m5 = 0.00015, 20_000, (30, 10, 8.0)
+        await s.run_cycle()
+        assert db.status(GOOD) == "alerted"
+        assert db.get_token(GOOD)["kind"] == "pullback"
+        text = [m for m in apis.sent if GOOD in m["text"]][0]["text"]
+        assert text.startswith("↩️ <b>PULLBACK</b> · peaked $250.0k, low $125.0k, bouncing at $150.0k")
+
+
 async def test_late_checkpoints_are_marked_missed(setup):
     apis, cfg, db = setup
     async with httpx.AsyncClient(transport=httpx.MockTransport(apis)) as client:

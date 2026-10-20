@@ -180,9 +180,10 @@ def report(db: Database, cfg: PaperConfig, since: float | None = None) -> str:
     }
     lines = [head, f"Closed trades: {len(rows)} (alerts at least 24h old){note}"]
     sections = [("All alerts", rows)]
-    near = [r for r in rows if r["kind"] == "near_bond"]
-    if near:  # compare the two alert types once near-bond trades exist
-        sections += [("Graduated", [r for r in rows if r["kind"] != "near_bond"]), ("⚡ Near bond", near)]
+    special = [("⚡ Near bond", "near_bond"), ("↩️ Pullback", "pullback")]
+    if any(r["kind"] in {k for _, k in special} for r in rows):  # compare alert types once they exist
+        sections.append(("Graduated", [r for r in rows if r["kind"] not in {k for _, k in special}]))
+        sections += [(title, [r for r in rows if r["kind"] == k]) for title, k in special]
     for title, group in sections:
         if not group:
             continue

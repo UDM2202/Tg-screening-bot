@@ -146,12 +146,12 @@ def _bundle_bucket(row) -> str | None:
 
 
 def _kind_bucket(row) -> str:
-    return "near bond" if row["kind"] == "near_bond" else "graduated"
+    return {"near_bond": "near bond", "pullback": "pullback"}.get(row["kind"], "graduated")
 
 
 # Ways to split alerted coins in /stats: (title, row labels in order, labeller).
 ALERT_BREAKDOWNS = [
-    ("Alerts by type", ["graduated", "near bond"], _kind_bucket),
+    ("Alerts by type", ["graduated", "near bond", "pullback"], _kind_bucket),
     ("Alerts by coin age at alert", ["under 30m old", "30m-2h old", "over 2h old"], _age_bucket),
     ("Alerts by market cap at alert", ["under $100k", "$100k-$300k", "over $300k"], _mcap_bucket),
     ("Alerts by price change in the hour before", ["falling", "up 0-100%", "up over 100%"], _pump_bucket),

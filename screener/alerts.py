@@ -45,10 +45,12 @@ def format_alert(
     socials: SocialsReport,
     result: Tier1Result,
     now: datetime,
+    headline: str | None = None,
 ) -> tuple[str, list[list[Button]]]:
+    """headline: an extra first line (HTML) marking a special alert type, e.g. a pullback."""
     m = market
     liq_ratio = m.liquidity_usd / m.market_cap_usd * 100 if m.market_cap_usd else None
-    lines = [
+    lines = [*([headline] if headline else []),
         f"🟢 <b>${escape(m.symbol)}</b> · {escape(m.name)}",
         f"<code>{m.address}</code>",
         "",

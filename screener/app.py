@@ -20,7 +20,7 @@ from . import paper, usage
 from .alerts import age_text, format_alert, format_near_bond_alert, usd
 from .config import Config
 from .db import Database
-from .filters import near_bond_reasons, tier1, tier2
+from .filters import near_bond_reasons, pullback_reasons, tier1, tier2
 from .http import ApiError, ClientError
 from .sources.dexscreener import DexScreener, Market
 from .sources.goplus import GoPlus
@@ -136,6 +136,7 @@ class Screener:
         markets = await self.dex.markets(addresses)
 
         passed: list[Market] = []
+        pullbacks: list[Market] = []
         for addr in addresses:
             market = markets.get(addr)
             if market is None:
@@ -147,14 +148,27 @@ class Screener:
                 self.db.set_expired(addr)
             elif result.passed:
                 passed.append(market)
+            elif self.cfg.pullback.enabled and self._is_pullback(market, now):
+                pullbacks.append(market)
 
-        log.info("Watchlist %d, with pools %d, passed market filter %d", len(addresses), len(markets), len(passed))
-        await asyncio.gather(*(self.check_token(m) for m in passed))
+        log.info("Watchlist %d, with pools %d, passed market filter %d, pullbacks %d",
+                 len(addresses), len(markets), len(passed), len(pullbacks))
+        await asyncio.gather(
+            *(self.check_token(m) for m in passed),
+            *(self.check_token(m, kind="pullback") for m in pullbacks),
+        )
 
-    async def check_token(self, market: Market) -> None:
+    def _is_pullback(self, market: Market, now: datetime) -> bool:
+        """Failed only the drop-from-peak rule, and looks like a bounce off a higher low."""
+        if not tier2(market, self.cfg.tier2, now, None).passed:
+            return False
+        history = self.db.price_history(market.address)
+        return history is not None and not pullback_reasons(market, self.cfg.pullback, history, time.time())
+
+    async def check_token(self, market: Market, kind: str | None = None) -> None:
         async with self.rug_check_slots:
             try:
-                await self._check_token(market)
+                await self._check_token(market, kind)
             except ClientError as exc:
                 if not self._give_up_on_report(market.address, exc, price=market.price_usd,
                                                mcap=market.market_cap_usd, liquidity=market.liquidity_usd):
@@ -180,7 +194,7 @@ class Screener:
         self.db.decide(address, "rejected", reject_codes=["no_rug_report"], details={"reasons": [reason]}, **decision)
         return True
 
-    async def _check_token(self, market: Market) -> None:
+    async def _check_token(self, market: Market, kind: str | None = None) -> None:
         t1 = self.cfg.tier1
         rug = await self.rugcheck.report(market.address)
         goplus = None
@@ -196,7 +210,7 @@ class Screener:
 
         result = tier1(rug, goplus, sell, t1)
         decision = dict(
-            price=market.price_usd, mcap=market.market_cap_usd, liquidity=market.liquidity_usd
+            price=market.price_usd, mcap=market.market_cap_usd, liquidity=market.liquidity_usd, kind=kind
         )
         if not result.passed:
             log.info("Rejected %s: %s", market.symbol, "; ".join(msg for _, msg in result.rejects))
@@ -217,7 +231,16 @@ class Screener:
         socials = await socials_mod.assess(
             market, self.profile_links.pop(market.address, None), self.db, self.tg, self.cfg.socials
         )
-        text, buttons = format_alert(market, rug, goplus, sell, socials, result, datetime.now(timezone.utc))
+        headline = None
+        if kind == "pullback":
+            history = self.db.price_history(market.address)
+            headline = (
+                f"↩️ <b>PULLBACK</b> · peaked {usd(history['peak_mcap'])}, low {usd(history['trough_mcap'])}, "
+                f"bouncing at {usd(market.market_cap_usd)}"
+            )
+        text, buttons = format_alert(
+            market, rug, goplus, sell, socials, result, datetime.now(timezone.utc), headline=headline
+        )
         self.db.decide(
             market.address,
             "alerted",

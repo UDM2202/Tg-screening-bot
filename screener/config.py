@@ -124,6 +124,26 @@ class PaperConfig:
 
 
 @dataclass
+class PullbackConfig:
+    """↩️ Pullback alerts: a coin that ran, cooled off, and is bouncing off a higher low.
+
+    Aimed at the second leg instead of the first spike. The coin must still pass every other
+    market rule (except the drop-from-peak one) and all the rug checks.
+    """
+    enabled: bool = True
+    # The first run: the peak must be at least this many times the first market cap seen.
+    min_run_x: float = 3.0
+    # How deep the pullback went, as % below the peak.
+    min_drop_pct: float = 30
+    max_drop_pct: float = 60
+    # Bounce off the low: at least this % above it, and the low at least this many minutes old.
+    min_bounce_pct: float = 10
+    min_minutes_since_low: float = 3
+    # Still a pullback: the price must be at least this % below the peak.
+    min_below_peak_pct: float = 15
+
+
+@dataclass
 class ApiConfig:
     dexscreener: str = "https://api.dexscreener.com"
     rugcheck: str = "https://api.rugcheck.xyz"
@@ -144,6 +164,7 @@ class Config:
     watch: WatchConfig = field(default_factory=WatchConfig)
     paper: PaperConfig = field(default_factory=PaperConfig)
     near_bond: NearBondConfig = field(default_factory=NearBondConfig)
+    pullback: PullbackConfig = field(default_factory=PullbackConfig)
     apis: ApiConfig = field(default_factory=ApiConfig)
     database: str = "data/screener.db"
     telegram_bot_token: str = ""
@@ -161,6 +182,7 @@ _SECTIONS = {
     "watch": WatchConfig,
     "paper": PaperConfig,
     "near_bond": NearBondConfig,
+    "pullback": PullbackConfig,
     "apis": ApiConfig,
 }
 
